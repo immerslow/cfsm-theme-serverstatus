@@ -6,6 +6,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { adaptHistory, PROBE_KEYS, type HistoryPoint, type Node, type ProbeKey, type Site } from "@/lib/adapt"
 import { axisBytes, axisTop, bytes, clockFor, cpuName, despike, quarters, rate, timeTicks, uptime } from "@/lib/format"
 import { request } from "@/lib/http"
+import { cn } from "@/lib/utils"
 
 const RANGES = [
   { hours: 0.167, label: "10 分钟" },
@@ -102,7 +103,7 @@ function despikeWindow(points: { ts: number }[]): number {
   return Math.min(15, Math.max(3, Math.round(420_000 / step) | 1))
 }
 
-export function Latency({ node, site, hours, className }: { node: Node; site: Site | null; hours: number; className?: string }) {
+export function Latency({ node, site, hours, tall }: { node: Node; site: Site | null; hours: number; tall?: boolean }) {
   const { rows, failed, retry } = useHistory(node, hours)
   const [hidden, setHidden] = useState<ProbeKey[]>([])
   const [smooth, setSmooth] = useState(false)
@@ -131,12 +132,12 @@ export function Latency({ node, site, hours, className }: { node: Node; site: Si
     return [...map.values()].sort((a, b) => Number(a.ts) - Number(b.ts))
   }, [series, rows])
 
-  if (!rows) return <Skeleton className={className ?? "h-40"} />
+  if (!rows) return <Skeleton className={tall ? "h-[310px] @max-3xl:h-[250px]" : "h-[190px]"} />
   if (failed) return <p className="py-6 text-center text-sm text-destructive" role="alert">读取延迟失败：{failed}<button onClick={retry} className="ml-2 text-primary hover:underline">重试</button></p>
   if (!series.length) return <p className="py-6 text-center text-sm text-muted-foreground">这段时间没有延迟数据</p>
   return (
-    <div className={className}>
-      <div className="mb-2 flex flex-wrap items-center justify-center gap-1.5">
+    <div className="space-y-2">
+      <div className="flex flex-wrap items-center justify-center gap-1.5">
         <button onClick={() => setSmooth((value) => !value)} className={`rounded-full px-2 py-0.5 text-[11px] ${smooth ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}>去尖峰</button>
         {series.map((item, index) => (
           <button
@@ -149,28 +150,30 @@ export function Latency({ node, site, hours, className }: { node: Node; site: Si
           </button>
         ))}
       </div>
-      <ResponsiveContainer>
-        <ComposedChart data={chartRows}>
-          <CartesianGrid strokeDasharray="3 3" className="stroke-border" vertical={false} />
-          <XAxis {...timeAxis(chartRows as { ts: number }[], hours)} />
-          <YAxis width={Y_WIDTH} unit="ms" domain={["auto", "auto"]} {...AXIS} />
-          <Tooltip labelFormatter={(ts) => new Date(Number(ts)).toLocaleString("zh-CN")} formatter={(v) => v === null ? ["超时", ""] : [`${Math.round(Number(v))} ms`, ""]} contentStyle={TIP} />
-          {shown.map((item) => (
-            <Line key={item.key} dataKey={smooth ? `s${item.key}` : item.key} name={item.name} stroke={PALETTE[series.findIndex((s) => s.key === item.key) % PALETTE.length]} {...SERIES} />
-          ))}
-          <Brush
-            dataKey="ts"
-            height={22}
-            travellerWidth={8}
-            tickFormatter={clockFor(hours)}
-            fill="var(--color-muted)"
-            stroke="var(--color-muted-foreground)"
-            startIndex={zoom?.[0]}
-            endIndex={zoom?.[1]}
-            onChange={(range) => setZoom([range.startIndex ?? 0, range.endIndex ?? chartRows.length - 1])}
-          />
-        </ComposedChart>
-      </ResponsiveContainer>
+      <div className={cn("w-full", tall ? "h-[310px] @max-3xl:h-[250px]" : "h-[190px]")}>
+        <ResponsiveContainer>
+          <ComposedChart data={chartRows}>
+            <CartesianGrid strokeDasharray="3 3" className="stroke-border" vertical={false} />
+            <XAxis {...timeAxis(chartRows as { ts: number }[], hours)} />
+            <YAxis width={Y_WIDTH} unit="ms" domain={["auto", "auto"]} {...AXIS} />
+            <Tooltip labelFormatter={(ts) => new Date(Number(ts)).toLocaleString("zh-CN")} formatter={(v) => v === null ? ["超时", ""] : [`${Math.round(Number(v))} ms`, ""]} contentStyle={TIP} />
+            {shown.map((item) => (
+              <Line key={item.key} dataKey={smooth ? `s${item.key}` : item.key} name={item.name} stroke={PALETTE[series.findIndex((s) => s.key === item.key) % PALETTE.length]} {...SERIES} />
+            ))}
+            <Brush
+              dataKey="ts"
+              height={22}
+              travellerWidth={8}
+              tickFormatter={clockFor(hours)}
+              fill="var(--color-muted)"
+              stroke="var(--color-muted-foreground)"
+              startIndex={zoom?.[0]}
+              endIndex={zoom?.[1]}
+              onChange={(range) => setZoom([range.startIndex ?? 0, range.endIndex ?? chartRows.length - 1])}
+            />
+          </ComposedChart>
+        </ResponsiveContainer>
+      </div>
     </div>
   )
 }
@@ -271,7 +274,7 @@ export function NodeDetail({ node, site }: { node: Node; site: Site | null }) {
             </ResponsiveContainer>
           </Panel>
           <Panel title="延迟">
-            <Latency node={node} site={site} hours={hours} className="h-40" />
+            <Latency node={node} site={site} hours={hours} />
           </Panel>
         </div>
       )}

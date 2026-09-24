@@ -151,8 +151,8 @@ function Details({ node, site }: { node: Node; site: Site | null }) {
             <span className="text-muted-foreground">网络延迟 · 最近 24 小时</span>
             <Link href={`#/server/${encodeURIComponent(node.id)}`} className="text-primary hover:underline">查看资源图表 →</Link>
           </div>
-          <Suspense fallback={<Skeleton className="h-[280px] @max-3xl:h-[220px]" />}>
-            <Latency node={node} site={site} hours={24} className="h-[280px] @max-3xl:h-[220px]" />
+          <Suspense fallback={<Skeleton className="h-[310px] @max-3xl:h-[250px]" />}>
+            <Latency node={node} site={site} hours={24} tall />
           </Suspense>
       </div>
     </div>
