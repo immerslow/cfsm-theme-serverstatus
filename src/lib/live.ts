@@ -5,6 +5,7 @@ import { ApiError, apiBases, request, wsUrl } from "./http"
 
 const POLL_MS = 15_000
 const RETRY_MS = 5_000
+const PING_MS = 30_000
 const ONLINE_MS = 5 * 60 * 1000
 
 export type Fleet = {
@@ -36,6 +37,7 @@ export function useFleet(): Fleet {
     let poll: ReturnType<typeof setInterval> | null = null
     let retry: ReturnType<typeof setTimeout> | null = null
     let expireTimer: ReturnType<typeof setInterval> | null = null
+    let ping: ReturnType<typeof setInterval> | null = null
     const base = apiBases()[0]
     let current: Node[] = []
     let ids: string[] = []
@@ -58,15 +60,29 @@ export function useFleet(): Fleet {
           if (cause instanceof ApiError && cause.status === 401) setClosed(true)
         })
 
+    const reconnect = () => {
+      if (stopped || retry) return
+      poll ??= setInterval(pull, POLL_MS)
+      retry = setTimeout(() => {
+        retry = null
+        if (!stopped && document.visibilityState !== "hidden") connect()
+      }, RETRY_MS)
+    }
+
     const connect = () => {
+      if (stopped || socket) return
       try {
         socket = new WebSocket(wsUrl(base, "all"))
       } catch {
-        poll ??= setInterval(pull, POLL_MS)
+        reconnect()
         return
       }
       socket.onopen = () => {
         socket?.send(JSON.stringify({ type: "subscribe", scope: "all", ids: ids.slice(0, 500) }))
+        if (ping) clearInterval(ping)
+        ping = setInterval(() => {
+          if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: "ping" }))
+        }, PING_MS)
       }
       socket.onmessage = (event) => {
         const samples = adaptBatch(JSON.parse(String(event.data)))
@@ -83,11 +99,13 @@ export function useFleet(): Fleet {
           poll = null
         }
       }
-      socket.onerror = () => socket?.close()
       socket.onclose = () => {
-        if (stopped) return
-        poll ??= setInterval(pull, POLL_MS)
-        retry = setTimeout(connect, RETRY_MS)
+        socket = null
+        if (ping) {
+          clearInterval(ping)
+          ping = null
+        }
+        if (!stopped) reconnect()
       }
     }
 
@@ -103,8 +121,11 @@ export function useFleet(): Fleet {
 
     const onHide = () => {
       if (document.hidden) {
-        socket?.close()
+        const current = socket
         socket = null
+        current?.close()
+      } else if (!socket && !retry) {
+        void pull().then(() => { if (!stopped) connect() })
       }
     }
     document.addEventListener("visibilitychange", onHide)
@@ -114,6 +135,7 @@ export function useFleet(): Fleet {
       socket?.close()
       if (poll) clearInterval(poll)
       if (retry) clearTimeout(retry)
+      if (ping) clearInterval(ping)
       if (expireTimer) clearInterval(expireTimer)
       document.removeEventListener("visibilitychange", onHide)
     }
@@ -132,6 +154,7 @@ export function useServer(id: string | null, list: Node[] | null) {
     const base = known?.base ?? apiBases()[0]
     let stopped = false
     let socket: WebSocket | null = null
+    let ping: ReturnType<typeof setInterval> | null = null
     const pull = () =>
       request(base, `/api/server?id=${encodeURIComponent(id)}`)
         .then((payload) => {
@@ -144,6 +167,12 @@ export function useServer(id: string | null, list: Node[] | null) {
     void pull()
     try {
       socket = new WebSocket(wsUrl(base, id))
+      socket.onopen = () => {
+        socket?.send(JSON.stringify({ type: "subscribe", scope: id, ids: [] }))
+        ping = setInterval(() => {
+          if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: "ping" }))
+        }, PING_MS)
+      }
       socket.onmessage = (event) => {
         const samples = adaptBatch(JSON.parse(String(event.data))).filter((sample) => sample.id === id)
         if (!samples.length) return
@@ -154,6 +183,7 @@ export function useServer(id: string | null, list: Node[] | null) {
     }
     return () => {
       stopped = true
+      if (ping) clearInterval(ping)
       socket?.close()
     }
   }, [id, known?.base])

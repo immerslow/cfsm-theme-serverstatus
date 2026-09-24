@@ -205,7 +205,7 @@ function Row({ node, index, site }: { node: Node; index: number; site: Site | nu
       </TableRow>
       {open && (
         <TableRow className={cn("border-0 hover:bg-transparent", shade)}>
-          <TableCell colSpan={12} className="border-t-0! p-0! text-left whitespace-normal">
+          <TableCell colSpan={12} className="border-t-0! p-0! text-left whitespace-normal @max-3xl:w-full">
             <Details node={node} site={site} />
           </TableCell>
         </TableRow>
@@ -247,7 +247,7 @@ function ServerTable({ title, nodes, site }: { title: string; nodes: Node[]; sit
           <span className="whitespace-nowrap">总流量 ↓ {bytes(totalRx)} · ↑ {bytes(totalTx)}</span>
         </div>
       </div>
-      <Table className="text-center text-sm @max-3xl:table-fixed @max-3xl:text-[10px]">
+      <Table className="text-center text-sm @max-3xl:text-[10px]">
         <TableHeader>
           <TableRow className="border-0 hover:bg-transparent">
             {heads.map(([col, label], i) => (

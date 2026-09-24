@@ -47,27 +47,32 @@ function Tab({ active, onClick, children }: { active: boolean; onClick: () => vo
 }
 
 function useHistory(node: Node | null, hours: number) {
+  const id = node?.id ?? null
+  const base = node?.base ?? null
   const [rows, setRows] = useState<HistoryPoint[] | null>(null)
+  const [loaded, setLoaded] = useState("")
   const [failed, setFailed] = useState("")
   const [attempt, setAttempt] = useState(0)
+  const key = id && base ? `${base}\n${id}\n${hours}\n${attempt}` : ""
   useEffect(() => {
-    if (!node) return
+    if (!id || !base) return
     let active = true
-    // 切换时间范围时先清掉上一窗口，避免旧曲线留在新请求返回之前。
-    // oxlint-disable-next-line react/set-state-in-effect
-    setRows(null)
-    // oxlint-disable-next-line react/set-state-in-effect
-    setFailed("")
-    request(node.base, `/api/history/all?id=${encodeURIComponent(node.id)}&hours=${hours}`)
-      .then((payload) => { if (active) setRows(adaptHistory(payload)) })
+    request(base, `/api/history/all?id=${encodeURIComponent(id)}&hours=${hours}`)
+      .then((payload) => {
+        if (!active) return
+        setRows(adaptHistory(payload))
+        setFailed("")
+        setLoaded(key)
+      })
       .catch((cause: unknown) => {
         if (!active) return
         setFailed(cause instanceof Error ? (cause.message || "网络错误") : "网络错误")
         setRows([])
+        setLoaded(key)
       })
     return () => { active = false }
-  }, [node, hours, attempt])
-  return { rows, failed, retry: () => setAttempt((n) => n + 1) }
+  }, [id, base, hours, attempt, key])
+  return { rows: loaded === key ? rows : null, failed: loaded === key ? failed : "", retry: () => setAttempt((n) => n + 1) }
 }
 
 function timeAxis(rows: { ts: number }[], hours: number) {
