@@ -81,11 +81,12 @@ assert.deepEqual(adaptBatch({
   updates: [{ serverId: "a", samples: [{ ts: 1, data: { cpu: 1 } }, { ts: 2, payload: { cpu: 2 } }, { metrics: { cpu: 3 } }] }],
 }).map((s) => s.data.cpu), [1, 2, 3])
 const paced = replayPlan([
-  { id: "a", ts: 3000, data: {} },
-  { id: "a", ts: 1000, data: {} },
-  { id: "b", ts: 9000, data: {} },
+  { id: "a", ts: 3000, data: { n: 3 } },
+  { id: "a", ts: 1000, data: { n: 1 } },
+  { id: "a", ts: 1000, data: { n: 1 } },
+  { id: "b", ts: 9000, data: { n: 9 } },
 ])
-assert.deepEqual(paced.map((step) => [step.sample.id, step.delay]), [["a", 0], ["a", 2000], ["b", 0]])
+assert.deepEqual(paced.map((step) => [step.sample.id, step.sample.data.n, step.delay]), [[ "a", 1, 0 ], [ "a", 3, 1000 ], [ "b", 9, 0 ]])
 
 const history = adaptHistory([
   { timestamp: 2000, cpu: 2, ram_used: null, ping_ct: false },

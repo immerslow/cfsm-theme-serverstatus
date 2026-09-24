@@ -304,8 +304,10 @@ export function adaptBatch(value: unknown): Sample[] {
   })
 }
 
-/** 一批样本按各自时间戳铺开回放，避免整批同时落到界面上。 */
-export function replayPlan(samples: Sample[], now = Date.now(), cap = 4_000): { sample: Sample; delay: number }[] {
+const TICK_MS = 1_000
+
+/** 一批里的多个采样按 1 秒一拍铺开；单采样立即生效。 */
+export function replayPlan(samples: Sample[]): { sample: Sample; delay: number }[] {
   const groups = new Map<string, Sample[]>()
   for (const sample of samples) {
     const list = groups.get(sample.id)
@@ -314,11 +316,12 @@ export function replayPlan(samples: Sample[], now = Date.now(), cap = 4_000): { 
   }
   return [...groups.values()].flatMap((group) => {
     const ordered = [...group].sort((a, b) => (a.ts ?? 0) - (b.ts ?? 0))
-    const first = ordered.find((sample) => sample.ts !== null)?.ts ?? now
-    return ordered.map((sample) => ({
-      sample,
-      delay: Math.max(0, Math.min((sample.ts ?? first) - first, cap)),
-    }))
+    const unique: Sample[] = []
+    for (const sample of ordered) {
+      if (unique.at(-1)?.ts !== sample.ts) unique.push(sample)
+    }
+    if (unique.length < 2) return unique.map((sample) => ({ sample, delay: 0 }))
+    return unique.map((sample, index) => ({ sample, delay: index * TICK_MS }))
   })
 }
 
