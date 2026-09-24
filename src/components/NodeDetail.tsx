@@ -138,17 +138,30 @@ export function Latency({ node, site, hours, tall }: { node: Node; site: Site | 
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap items-center justify-center gap-1.5">
-        <button onClick={() => setSmooth((value) => !value)} className={`rounded-full px-2 py-0.5 text-[11px] ${smooth ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}>去尖峰</button>
-        {series.map((item, index) => (
-          <button
-            key={item.key}
-            onClick={() => setHidden((list) => list.includes(item.key) ? list.filter((key) => key !== item.key) : [...list, item.key])}
-            className={`rounded-full px-2 py-0.5 text-[11px] ${hidden.includes(item.key) ? "text-muted-foreground line-through" : ""}`}
-            style={{ color: hidden.includes(item.key) ? undefined : PALETTE[index % PALETTE.length] }}
-          >
-            {item.name}
-          </button>
-        ))}
+        {series.map((item, index) => {
+          const on = !hidden.includes(item.key)
+          const color = PALETTE[index % PALETTE.length]
+          return (
+            <button
+              key={item.key}
+              onClick={() => setHidden((list) => on ? [...list, item.key] : list.filter((key) => key !== item.key))}
+              className={cn("inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs transition-opacity", on ? "" : "opacity-40")}
+            >
+              <svg width="14" height="6" className="shrink-0" aria-hidden>
+                <line x1="0" y1="3" x2="14" y2="3" stroke={color} strokeWidth="2" />
+              </svg>
+              {item.name}
+            </button>
+          )
+        })}
+        <button
+          onClick={() => setSmooth((value) => !value)}
+          aria-pressed={smooth}
+          title="把孤立的异常值换成邻近若干点的中位数，持续的变化保持原样"
+          className={cn("rounded-md border px-2 py-1 text-xs transition-opacity", smooth ? "" : "opacity-40")}
+        >
+          削峰
+        </button>
       </div>
       <div className={cn("w-full", tall ? "h-[310px] @max-3xl:h-[250px]" : "h-[190px]")}>
         <ResponsiveContainer>
