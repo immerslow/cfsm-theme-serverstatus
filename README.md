@@ -10,10 +10,10 @@ CFSM 主控**不会**读取本仓库源码里的说明文件。
 - 自定义安装只认构建产物。后台「自定义主题 URL」填：
 
   ```text
-  https://github.com/immerslow/cfsm-theme-serverstatus/tree/v1.0.4
+  https://github.com/immerslow/cfsm-theme-serverstatus/tree/v1.0.5
   ```
 
-  `main` 是源码，入口是 `/src/main.tsx`，装上去会空白。`v1.0.4` 只有构建后的 `index.html` 和 `assets/`。主控反代这两个路径，不解析 README。
+  `main` 是源码，入口是 `/src/main.tsx`，装上去会空白。`v1.0.5` 只有构建后的 `index.html` 和 `assets/`。主控反代这两个路径，不解析 README。
 
 ## 参考
 

@@ -142,7 +142,7 @@ function loads(value: unknown): [number | null, number | null, number | null] {
 
 const TRAFFIC_POWER: Record<string, number> = { b: 0, kb: 1, kib: 1, mb: 2, mib: 2, gb: 3, gib: 3, tb: 4, tib: 4 }
 
-/** CFSM 流量配额是 `"1TB"` 这类字符串。空白、0、-1 都视为不限额。 */
+/** CFSM 流量配额是 GB 数字。空白、0、-1 都视为不限额。 */
 export function trafficBytes(value: unknown): number | null {
   const text = str(value)
   if (!text || text === "0" || text === "-1") return null
@@ -150,7 +150,8 @@ export function trafficBytes(value: unknown): number | null {
   if (!match) return null
   const amount = Number(match[1])
   if (!Number.isFinite(amount) || amount <= 0) return null
-  return amount * 1024 ** (TRAFFIC_POWER[(match[2] ?? "gb").toLowerCase()] ?? 3)
+  const unit = match[2]?.toLowerCase()
+  return amount * (unit ? 1024 ** TRAFFIC_POWER[unit] : 1024 ** 3)
 }
 
 function priceOf(value: unknown): number | null {

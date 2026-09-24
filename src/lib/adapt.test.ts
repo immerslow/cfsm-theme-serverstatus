@@ -12,6 +12,7 @@ assert.equal(probe(-1), false)
 
 assert.equal(trafficBytes("1TB"), 1024 ** 4)
 assert.equal(trafficBytes("1.5 GiB"), 1.5 * 1024 ** 3)
+assert.equal(trafficBytes("500"), 500 * 1024 ** 3)
 assert.equal(trafficBytes(""), null)
 assert.equal(trafficBytes("-1"), null)
 assert.equal(trafficBytes("0"), null)
@@ -40,7 +41,7 @@ const list = adaptList({
     cpu_cores: 2,
     os: "Ubuntu 22.04",
     price: "0",
-    traffic_limit: "1TB",
+    traffic_limit: "1024",
     traffic_calc_type: "max",
     ping_ct: 20,
     ping_cu: null,

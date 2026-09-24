@@ -203,8 +203,10 @@ function Row({ node, index, site }: { node: Node; index: number; site: Site | nu
       </TableRow>
       {open && (
         <TableRow className={cn("border-0 hover:bg-transparent", shade)}>
-          <TableCell colSpan={12} className="h-auto! border-t-0! p-0! text-left whitespace-normal @max-3xl:w-full">
-            <Details node={node} site={site} />
+          <TableCell colSpan={12} className="relative h-auto! border-t-0! p-0! text-left whitespace-normal">
+            <div className="absolute inset-x-0 top-0 z-10 border-b bg-inherit">
+              <Details node={node} site={site} />
+            </div>
           </TableCell>
         </TableRow>
       )}
@@ -212,19 +214,19 @@ function Row({ node, index, site }: { node: Node; index: number; site: Site | nu
   )
 }
 
-export function ServerTables({ nodes, site, fixed }: { nodes: Node[]; site: Site | null; fixed?: boolean }) {
+export function ServerTables({ nodes, site }: { nodes: Node[]; site: Site | null }) {
   const groups = groupsOf(nodes)
-  if (groups.length === 0) return <ServerTable title="服务器" nodes={nodes} site={site} fixed={fixed} />
+  if (groups.length === 0) return <ServerTable title="服务器" nodes={nodes} site={site} />
   const ungrouped = nodes.filter((n) => !n.group)
   return (
     <>
-      {groups.map((g) => <ServerTable key={`=${g}`} title={g} nodes={nodes.filter((n) => n.group === g)} site={site} fixed={fixed} />)}
-      {ungrouped.length > 0 && <ServerTable key="*" title="未分组" nodes={ungrouped} site={site} fixed={fixed} />}
+      {groups.map((g) => <ServerTable key={`=${g}`} title={g} nodes={nodes.filter((n) => n.group === g)} site={site} />)}
+      {ungrouped.length > 0 && <ServerTable key="*" title="未分组" nodes={ungrouped} site={site} />}
     </>
   )
 }
 
-function ServerTable({ title, nodes, site, fixed }: { title: string; nodes: Node[]; site: Site | null; fixed?: boolean }) {
+function ServerTable({ title, nodes, site }: { title: string; nodes: Node[]; site: Site | null }) {
   const online = nodes.filter((n) => n.online && n.metrics)
   const sum = (pick: (n: Node) => number | null) => online.reduce((total, n) => total + (pick(n) ?? 0), 0)
   const totalRx = nodes.reduce((total, n) => total + (n.total_rx ?? 0), 0)
@@ -245,7 +247,7 @@ function ServerTable({ title, nodes, site, fixed }: { title: string; nodes: Node
           <span className="whitespace-nowrap">总流量 ↓ {bytes(totalRx)} · ↑ {bytes(totalTx)}</span>
         </div>
       </div>
-      <Table className={cn("text-center text-sm @max-3xl:text-[10px]", fixed && "@max-3xl:table-fixed")}>
+      <Table className="text-center text-sm @max-3xl:table-fixed @max-3xl:text-[10px]">
         <TableHeader>
           <TableRow className="border-0 hover:bg-transparent">
             {heads.map(([col, label], i) => (
