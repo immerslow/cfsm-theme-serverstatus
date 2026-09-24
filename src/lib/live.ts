@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react"
 
-import { adaptBatch, adaptList, adaptNode, adaptSite, mergeSample, type Node, type Site } from "./adapt"
+import { adaptBatch, adaptList, adaptNode, adaptSite, mergeSample, replayPlan, type Node, type Sample, type Site } from "./adapt"
 import { ApiError, apiBases, request, wsUrl } from "./http"
 
 const POLL_MS = 15_000
@@ -38,6 +38,7 @@ export function useFleet(): Fleet {
     let retry: ReturnType<typeof setTimeout> | null = null
     let expireTimer: ReturnType<typeof setInterval> | null = null
     let ping: ReturnType<typeof setInterval> | null = null
+    const replay: ReturnType<typeof setTimeout>[] = []
     const base = apiBases()[0]
     let current: Node[] = []
     let ids: string[] = []
@@ -84,16 +85,19 @@ export function useFleet(): Fleet {
           if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: "ping" }))
         }, PING_MS)
       }
+      const play = (sample: Sample) => {
+        if (stopped) return
+        const node = current.find((item) => item.id === sample.id)
+        if (!node) return
+        apply(current.map((item) => item.id === sample.id ? mergeSample(item, sample) : item))
+      }
       socket.onmessage = (event) => {
         const samples = adaptBatch(JSON.parse(String(event.data)))
         if (!samples.length) return
-        const now = Date.now()
-        const known = new Map(current.map((node) => [node.id, node]))
-        for (const sample of samples) {
-          const node = known.get(sample.id)
-          if (node) known.set(sample.id, mergeSample(node, sample, now))
+        for (const step of replayPlan(samples)) {
+          if (step.delay === 0) play(step.sample)
+          else replay.push(setTimeout(() => play(step.sample), step.delay))
         }
-        apply(current.map((node) => known.get(node.id) ?? node))
         if (poll) {
           clearInterval(poll)
           poll = null
@@ -137,6 +141,7 @@ export function useFleet(): Fleet {
       if (retry) clearTimeout(retry)
       if (ping) clearInterval(ping)
       if (expireTimer) clearInterval(expireTimer)
+      for (const timer of replay) clearTimeout(timer)
       document.removeEventListener("visibilitychange", onHide)
     }
   }, [tick])

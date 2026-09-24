@@ -8,6 +8,8 @@ import { axisBytes, axisTop, bytes, clockFor, cpuName, quarters, rate, timeTicks
 import { request } from "@/lib/http"
 
 const RANGES = [
+  { hours: 0.167, label: "10 分钟" },
+  { hours: 0.5, label: "30 分钟" },
   { hours: 1, label: "1 小时" },
   { hours: 6, label: "6 小时" },
   { hours: 24, label: "24 小时" },
@@ -122,7 +124,7 @@ export function Latency({ node, site, hours, className }: { node: Node; site: Si
   if (!series.length) return <p className="py-6 text-center text-sm text-muted-foreground">这段时间没有延迟数据</p>
   return (
     <div className={className}>
-      <div className="mb-2 flex flex-wrap gap-1.5">
+      <div className="mb-2 flex flex-wrap justify-center gap-1.5">
         {series.map((item, index) => (
           <button
             key={item.key}
@@ -160,7 +162,6 @@ export function NodeDetail({ node, site }: { node: Node; site: Site | null }) {
       cpu: axisTop(max((row) => row.cpu), 4, 10, 100),
       load: axisTop(max((row) => row.load), 1),
       rate: axisTop(max((row) => Math.max(row.net_rx ?? 0, row.net_tx ?? 0)), 1024, 1024),
-      traffic: axisTop(max((row) => Math.max(row.month_rx ?? 0, row.month_tx ?? 0)), 1024, 1024),
     }
   }, [rows])
   const memTop = m?.mem_total ?? axisTop((rows ?? []).reduce((hi, row) => Math.max(hi, row.mem_used ?? 0), 0), 1024 * 1024, 1024)
@@ -231,18 +232,6 @@ export function NodeDetail({ node, site }: { node: Node; site: Site | null }) {
                 <Tooltip labelFormatter={(ts) => new Date(Number(ts)).toLocaleString("zh-CN")} formatter={(v) => rate(v === null ? null : Number(v))} contentStyle={TIP} />
                 <Line dataKey="net_rx" name="下行" stroke="var(--color-chart-2)" {...SERIES} />
                 <Line dataKey="net_tx" name="上行" stroke="var(--color-chart-3)" {...SERIES} />
-              </LineChart>
-            </ResponsiveContainer>
-          </Panel>
-          <Panel title={<>累计流量<span className="ml-3 text-chart-2">● 接收</span><span className="ml-2 text-chart-3">● 发送</span></>}>
-            <ResponsiveContainer>
-              <LineChart data={rows}>
-                <CartesianGrid strokeDasharray="3 3" className="stroke-border" vertical={false} />
-                <XAxis {...timeAxis(rows, hours)} />
-                <YAxis domain={[0, tops.traffic]} ticks={quarters(tops.traffic)} tickFormatter={axisBytes} width={Y_WIDTH} {...AXIS} />
-                <Tooltip labelFormatter={(ts) => new Date(Number(ts)).toLocaleString("zh-CN")} formatter={(v) => bytes(v === null ? null : Number(v))} contentStyle={TIP} />
-                <Line dataKey="month_rx" name="接收" stroke="var(--color-chart-2)" {...SERIES} />
-                <Line dataKey="month_tx" name="发送" stroke="var(--color-chart-3)" {...SERIES} />
               </LineChart>
             </ResponsiveContainer>
           </Panel>

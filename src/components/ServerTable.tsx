@@ -205,7 +205,7 @@ function Row({ node, index, site }: { node: Node; index: number; site: Site | nu
       </TableRow>
       {open && (
         <TableRow className={cn("border-0 hover:bg-transparent", shade)}>
-          <TableCell colSpan={12} className="border-t-0! p-0! text-left whitespace-normal @max-3xl:w-full">
+          <TableCell colSpan={12} className="h-auto! border-t-0! p-0! text-left whitespace-normal @max-3xl:w-full">
             <Details node={node} site={site} />
           </TableCell>
         </TableRow>

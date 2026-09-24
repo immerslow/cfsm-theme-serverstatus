@@ -1,7 +1,7 @@
 /// <reference types="node" />
 import assert from "node:assert/strict"
 
-import { adaptBatch, adaptHistory, adaptList, adaptNode, groupsOf, mergeSample, monthUsage, probe, trafficBytes } from "./adapt.ts"
+import { adaptBatch, adaptHistory, adaptList, adaptNode, groupsOf, mergeSample, monthUsage, probe, replayPlan, trafficBytes } from "./adapt.ts"
 
 assert.equal(probe(false), false)
 assert.equal(probe(null), null)
@@ -80,6 +80,12 @@ assert.deepEqual(adaptBatch({
   type: "batchUpdate",
   updates: [{ serverId: "a", samples: [{ ts: 1, data: { cpu: 1 } }, { ts: 2, payload: { cpu: 2 } }, { metrics: { cpu: 3 } }] }],
 }).map((s) => s.data.cpu), [1, 2, 3])
+const paced = replayPlan([
+  { id: "a", ts: 3000, data: {} },
+  { id: "a", ts: 1000, data: {} },
+  { id: "b", ts: 9000, data: {} },
+])
+assert.deepEqual(paced.map((step) => [step.sample.id, step.delay]), [["a", 0], ["a", 2000], ["b", 0]])
 
 const history = adaptHistory([
   { timestamp: 2000, cpu: 2, ram_used: null, ping_ct: false },

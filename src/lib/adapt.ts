@@ -304,6 +304,24 @@ export function adaptBatch(value: unknown): Sample[] {
   })
 }
 
+/** 一批样本按各自时间戳铺开回放，避免整批同时落到界面上。 */
+export function replayPlan(samples: Sample[], now = Date.now(), cap = 4_000): { sample: Sample; delay: number }[] {
+  const groups = new Map<string, Sample[]>()
+  for (const sample of samples) {
+    const list = groups.get(sample.id)
+    if (list) list.push(sample)
+    else groups.set(sample.id, [sample])
+  }
+  return [...groups.values()].flatMap((group) => {
+    const ordered = [...group].sort((a, b) => (a.ts ?? 0) - (b.ts ?? 0))
+    const first = ordered.find((sample) => sample.ts !== null)?.ts ?? now
+    return ordered.map((sample) => ({
+      sample,
+      delay: Math.max(0, Math.min((sample.ts ?? first) - first, cap)),
+    }))
+  })
+}
+
 /** 只覆盖样本里真正出现的字段，未知节点不凭空创建。 */
 export function mergeSample(node: Node, sample: Sample, now = Date.now()): Node {
   if (node.id !== sample.id) return node

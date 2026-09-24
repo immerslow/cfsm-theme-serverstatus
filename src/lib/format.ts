@@ -97,10 +97,12 @@ export const CYCLES: Record<string, string> = {
   onetime: "一次性",
 }
 
+const HHMMSS = new Intl.DateTimeFormat("zh-CN", { hour: "2-digit", minute: "2-digit", second: "2-digit" })
 const HHMM = new Intl.DateTimeFormat("zh-CN", { hour: "2-digit", minute: "2-digit" })
 const MDHHMM = new Intl.DateTimeFormat("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })
 
 export function clockFor(hours: number): (ms: number) => string {
+  if (hours < 1) return (ms) => HHMMSS.format(ms)
   return hours <= 24 ? (ms) => HHMM.format(ms) : (ms) => MDHHMM.format(ms)
 }
 
@@ -117,7 +119,7 @@ export function cpuName(name: string): string {
     .trim()
 }
 
-const TICK_STEPS = [1, 2, 5, 10, 15, 30, 60, 120, 180, 360, 720, 1440, 2880, 10080].map((m) => m * 60_000)
+const TICK_STEPS = [1 / 6, 1 / 2, 1, 2, 5, 10, 15, 30, 60, 120, 180, 360, 720, 1440, 2880, 10080].map((m) => m * 60_000)
 
 export function timeTicks(from: number, to: number, count = 8): number[] {
   const step = TICK_STEPS.find((s) => (to - from) / s <= count) ?? TICK_STEPS[TICK_STEPS.length - 1]
