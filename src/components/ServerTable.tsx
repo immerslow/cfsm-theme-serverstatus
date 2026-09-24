@@ -227,8 +227,8 @@ export function ServerTables({ nodes, site }: { nodes: Node[]; site: Site | null
 function ServerTable({ title, nodes, site }: { title: string; nodes: Node[]; site: Site | null }) {
   const online = nodes.filter((n) => n.online && n.metrics)
   const sum = (pick: (n: Node) => number | null) => online.reduce((total, n) => total + (pick(n) ?? 0), 0)
-  const totalRx = nodes.reduce((total, n) => total + (n.total_rx ?? 0), 0)
-  const totalTx = nodes.reduce((total, n) => total + (n.total_tx ?? 0), 0)
+  const used = nodes.reduce((total, n) => n.show_traffic ? total + (monthUsage(n) ?? 0) : total, 0)
+  const limit = nodes.reduce((total, n) => n.show_traffic ? total + (n.traffic_limit ?? 0) : total, 0)
   const heads: [keyof typeof COL, ReactNode][] = [
     ["status", "状态"], ["name", "名称"], ["location", "位置"], ["os", "系统"], ["uptime", "在线"],
     ["expiry", "到期"], ["load", "负载"], ["speed", "网速 ↓|↑"],
@@ -242,7 +242,7 @@ function ServerTable({ title, nodes, site }: { title: string; nodes: Node[]; sit
           <span className="whitespace-nowrap">
             在线 {nodes.filter((n) => n.online).length} / {nodes.length} · ↓ {compact(sum((n) => n.metrics?.net_rx ?? null))}/s · ↑ {compact(sum((n) => n.metrics?.net_tx ?? null))}/s
           </span>
-          <span className="whitespace-nowrap">总流量 ↓ {bytes(totalRx)} · ↑ {bytes(totalTx)}</span>
+          <span className="whitespace-nowrap">流量 {bytes(used)}{limit > 0 ? ` / ${bytes(limit)}` : ""}</span>
         </div>
       </div>
       <Table className="text-center text-sm @max-3xl:table-fixed @max-3xl:text-[10px]">

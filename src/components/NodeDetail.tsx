@@ -273,9 +273,10 @@ export function NodeDetail({ node, site }: { node: Node; site: Site | null }) {
               </AreaChart>
             </ResponsiveContainer>
           </Panel>
-          <Panel title="延迟">
+          <div>
+            <h4 className="mb-2 text-xs font-medium text-muted-foreground">延迟</h4>
             <Latency node={node} site={site} hours={hours} />
-          </Panel>
+          </div>
         </div>
       )}
     </div>
