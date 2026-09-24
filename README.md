@@ -1,6 +1,19 @@
 # CFSM ServerStatus
 
-[CF-Server-Monitor](https://github.com/huilang-me/CF-Server-Monitor) 的第三方主题，沿用经典 ServerStatus 紧凑表格。数据只走 CFSM 公开主题接口。
+个人使用的 [CF-Server-Monitor](https://github.com/huilang-me/CF-Server-Monitor) 第三方主题，把经典 ServerStatus 紧凑表格接到 CFSM 公开接口上。由 vibe coding 构建，仅供自己使用，不提供支持。
+
+## 主题说明从哪来
+
+CFSM 主控**不会**读取本仓库源码里的说明文件。
+
+- 主题商店卡片的名称、简介、封面、作者，来自 [CFSM-Theme-Store](https://github.com/huilang-me/CFSM-Theme-Store) 的 `themes.json`。主控只拉这份清单；要出现在商店里，需要往那个仓库提交条目，而不是在这里加文件。
+- 自定义安装只认构建产物。后台「自定义主题 URL」填 GitHub 上包含 `index.html` 和 `assets/` 的地址，例如某个 commit 的 `tree/<commit>`。主控反代这两个路径，不解析 README。
+
+## 参考
+
+- 布局与交互：[monitor-theme-serverstatus](https://github.com/monitor-probe/monitor-theme-serverstatus)
+- 数据接口：[CF-Server-Monitor](https://github.com/huilang-me/CF-Server-Monitor) 的 `theme-develop.md`
+- 主题约定对照：[CFSM-Glassmorphism](https://github.com/allury/CFSM-Glassmorphism)
 
 ## 开发
 
