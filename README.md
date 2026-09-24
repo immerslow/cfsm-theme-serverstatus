@@ -7,7 +7,13 @@
 CFSM 主控**不会**读取本仓库源码里的说明文件。
 
 - 主题商店卡片的名称、简介、封面、作者，来自 [CFSM-Theme-Store](https://github.com/huilang-me/CFSM-Theme-Store) 的 `themes.json`。主控只拉这份清单；要出现在商店里，需要往那个仓库提交条目，而不是在这里加文件。
-- 自定义安装只认构建产物。后台「自定义主题 URL」填 GitHub 上包含 `index.html` 和 `assets/` 的地址，例如某个 commit 的 `tree/<commit>`。主控反代这两个路径，不解析 README。
+- 自定义安装只认构建产物。后台「自定义主题 URL」填：
+
+  ```text
+  https://github.com/immerslow/cfsm-theme-serverstatus/tree/theme-v1.0.0
+  ```
+
+  `main` 和 `v1.0.0` 是源码，入口是 `/src/main.tsx`，装上去会空白。`theme-v1.0.0` 只有构建后的 `index.html` 和 `assets/`。主控反代这两个路径，不解析 README。
 
 ## 参考
 
