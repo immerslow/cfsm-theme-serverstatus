@@ -60,7 +60,7 @@ function Bar({ pct, label }: { pct: number | null; label?: string }) {
 function Expiry({ node }: { node: Node }) {
   if (!node.show_expire) return <span className="text-muted-foreground">—</span>
   const days = daysUntil(node.expires_at)
-  if (!node.expires_at || days === null) return <span className="text-muted-foreground" title="未设置到期">{FOREVER}</span>
+  if (!node.expires_at || days === null) return <span className="text-muted-foreground" title="永不到期">{FOREVER}</span>
   if (days < 0) return <span className="text-danger">已过期</span>
   return <span className={cn(days <= 7 && "text-warn")}>{days} 天</span>
 }
@@ -146,8 +146,7 @@ function Details({ node, site }: { node: Node; site: Site | null }) {
           <Line label="流量重置">每月 {node.traffic_reset_day} 日重置</Line>
         )}
       </div>
-      {node.show_probes && (
-        <div className="space-y-2 border-t pt-3">
+      <div className="space-y-2 border-t pt-3">
           <div className="flex items-baseline justify-between gap-3 text-xs">
             <span className="text-muted-foreground">网络延迟 · 最近 24 小时</span>
             <Link href={`#/server/${encodeURIComponent(node.id)}`} className="text-primary hover:underline">查看资源图表 →</Link>
@@ -155,8 +154,7 @@ function Details({ node, site }: { node: Node; site: Site | null }) {
           <Suspense fallback={<Skeleton className="h-[280px] @max-3xl:h-[220px]" />}>
             <Latency node={node} site={site} hours={24} className="h-[280px] @max-3xl:h-[220px]" />
           </Suspense>
-        </div>
-      )}
+      </div>
     </div>
   )
 }
@@ -214,19 +212,19 @@ function Row({ node, index, site }: { node: Node; index: number; site: Site | nu
   )
 }
 
-export function ServerTables({ nodes, site }: { nodes: Node[]; site: Site | null }) {
+export function ServerTables({ nodes, site, fixed }: { nodes: Node[]; site: Site | null; fixed?: boolean }) {
   const groups = groupsOf(nodes)
-  if (groups.length === 0) return <ServerTable title="服务器" nodes={nodes} site={site} />
+  if (groups.length === 0) return <ServerTable title="服务器" nodes={nodes} site={site} fixed={fixed} />
   const ungrouped = nodes.filter((n) => !n.group)
   return (
     <>
-      {groups.map((g) => <ServerTable key={`=${g}`} title={g} nodes={nodes.filter((n) => n.group === g)} site={site} />)}
-      {ungrouped.length > 0 && <ServerTable key="*" title="未分组" nodes={ungrouped} site={site} />}
+      {groups.map((g) => <ServerTable key={`=${g}`} title={g} nodes={nodes.filter((n) => n.group === g)} site={site} fixed={fixed} />)}
+      {ungrouped.length > 0 && <ServerTable key="*" title="未分组" nodes={ungrouped} site={site} fixed={fixed} />}
     </>
   )
 }
 
-function ServerTable({ title, nodes, site }: { title: string; nodes: Node[]; site: Site | null }) {
+function ServerTable({ title, nodes, site, fixed }: { title: string; nodes: Node[]; site: Site | null; fixed?: boolean }) {
   const online = nodes.filter((n) => n.online && n.metrics)
   const sum = (pick: (n: Node) => number | null) => online.reduce((total, n) => total + (pick(n) ?? 0), 0)
   const totalRx = nodes.reduce((total, n) => total + (n.total_rx ?? 0), 0)
@@ -247,7 +245,7 @@ function ServerTable({ title, nodes, site }: { title: string; nodes: Node[]; sit
           <span className="whitespace-nowrap">总流量 ↓ {bytes(totalRx)} · ↑ {bytes(totalTx)}</span>
         </div>
       </div>
-      <Table className="text-center text-sm @max-3xl:text-[10px]">
+      <Table className={cn("text-center text-sm @max-3xl:text-[10px]", fixed && "@max-3xl:table-fixed")}>
         <TableHeader>
           <TableRow className="border-0 hover:bg-transparent">
             {heads.map(([col, label], i) => (

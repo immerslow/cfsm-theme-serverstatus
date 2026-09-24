@@ -48,6 +48,7 @@ export type Node = {
   cpu_name: string
   cpu_cores: number | null
   agent_version: string
+  report_interval: number | null
   price: number | null
   currency: string
   billing_cycle: string
@@ -217,6 +218,7 @@ export function adaptNode(value: unknown, base: string, site: { show_price?: boo
     cpu_name: str(input.cpu_info) ?? "",
     cpu_cores: cores,
     agent_version: str(input.agent_version) ?? "",
+    report_interval: nonneg(input.wss_report_interval),
     price: priceOf(input.price),
     currency: str(input.currency) ?? "",
     billing_cycle: str(input.billing_cycle) ?? "",
@@ -304,25 +306,11 @@ export function adaptBatch(value: unknown): Sample[] {
   })
 }
 
-const TICK_MS = 1_000
-
-/** 一批里的多个采样按 1 秒一拍铺开；单采样立即生效。 */
-export function replayPlan(samples: Sample[]): { sample: Sample; delay: number }[] {
-  const groups = new Map<string, Sample[]>()
-  for (const sample of samples) {
-    const list = groups.get(sample.id)
-    if (list) list.push(sample)
-    else groups.set(sample.id, [sample])
-  }
-  return [...groups.values()].flatMap((group) => {
-    const ordered = [...group].sort((a, b) => (a.ts ?? 0) - (b.ts ?? 0))
-    const unique: Sample[] = []
-    for (const sample of ordered) {
-      if (unique.at(-1)?.ts !== sample.ts) unique.push(sample)
-    }
-    if (unique.length < 2) return unique.map((sample) => ({ sample, delay: 0 }))
-    return unique.map((sample, index) => ({ sample, delay: index * TICK_MS }))
-  })
+/** 同一轮分节点消息收齐后一次应用。间隔取最快上报周期的一半，限制在 250～1000ms。 */
+export function settleDelay(intervals: readonly (number | null)[]): number {
+  const seconds = intervals.filter((value): value is number => value !== null && value > 0)
+  if (!seconds.length) return 1_000
+  return Math.min(1_000, Math.max(250, Math.min(...seconds) * 500))
 }
 
 /** 只覆盖样本里真正出现的字段，未知节点不凭空创建。 */
@@ -359,6 +347,7 @@ export function mergeSample(node: Node, sample: Sample, now = Date.now()): Node 
     arch: "arch" in data ? patch.arch : node.arch,
     cpu_name: "cpu_info" in data ? patch.cpu_name : node.cpu_name,
     cpu_cores: "cpu_cores" in data ? patch.cpu_cores : node.cpu_cores,
+    report_interval: "wss_report_interval" in data ? patch.report_interval : node.report_interval,
     total_rx: "net_rx" in data ? patch.total_rx : node.total_rx,
     total_tx: "net_tx" in data ? patch.total_tx : node.total_tx,
     month_rx: "net_rx_monthly" in data ? patch.month_rx : node.month_rx,

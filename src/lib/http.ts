@@ -111,9 +111,19 @@ export async function request(base: string, path: string, init?: { method?: "GET
     const payload: unknown = text ? JSON.parse(text) : null
     if (!res.ok) {
       if (res.status === 401) writeStorage(STORAGE_KEYS.jwt, null)
-      if (res.status === 403) writeStorage(STORAGE_KEYS.turnstileVerified, null)
+      if (res.status === 403) {
+        writeStorage(STORAGE_KEYS.turnstileToken, null)
+        writeStorage(STORAGE_KEYS.turnstileVerified, null)
+      }
       const { message, code } = messageOf(payload, res.statusText || "请求失败")
       throw new ApiError(res.status, message, code)
+    }
+    if (payload && typeof payload === "object" && !Array.isArray(payload)) {
+      const verified = (payload as Record<string, unknown>).turnstile_verified
+      if (typeof verified === "string") {
+        writeStorage(STORAGE_KEYS.turnstileVerified, verified)
+        writeStorage(STORAGE_KEYS.turnstileToken, null)
+      }
     }
     return payload
   } catch (cause) {

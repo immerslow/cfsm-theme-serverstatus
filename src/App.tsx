@@ -70,7 +70,7 @@ export default function App() {
   const route = useRoute()
   const { nodes, site, error, refresh } = useFleet()
   const openId = route.name === "server" ? route.id : null
-  const { node: selected, error: detailError } = useServer(openId, nodes)
+  const { node: selected, error: detailError } = useServer(openId, nodes, site?.ws_timeout_minutes ?? 0)
   const remote = site ? resolveSettings(site.theme_options, null) : null
   const [override, setOverride] = useState<Settings | null>(null)
   const settings = override ?? remote ?? resolveSettings(null)
@@ -120,7 +120,7 @@ export default function App() {
         ) : !nodes ? (
           <Skeleton className="h-80" />
         ) : route.name === "home" ? (
-          sorted.length === 0 ? <p className="rounded-md border bg-card py-16 text-center text-sm text-muted-foreground shadow-sm">还没有节点</p> : <ServerTables nodes={sorted} site={site} />
+          sorted.length === 0 ? <p className="rounded-md border bg-card py-16 text-center text-sm text-muted-foreground shadow-sm">还没有节点</p> : <ServerTables nodes={sorted} site={site} fixed />
         ) : selected ? (
           <div className="grid gap-5 rounded-md border bg-card p-5 text-card-foreground shadow-sm max-md:gap-3 max-md:p-2.5 md:grid-cols-[220px_minmax(0,1fr)]">
             <NodePicker nodes={sorted} selected={selected.id} />

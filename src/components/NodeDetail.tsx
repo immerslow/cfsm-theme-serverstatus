@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from "react"
-import { Area, AreaChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
+import { Area, AreaChart, Brush, CartesianGrid, ComposedChart, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
 
 import { Dot, Flag } from "@/components/ServerTable"
 import { Skeleton } from "@/components/ui/skeleton"
 import { adaptHistory, PROBE_KEYS, type HistoryPoint, type Node, type ProbeKey, type Site } from "@/lib/adapt"
-import { axisBytes, axisTop, bytes, clockFor, cpuName, quarters, rate, timeTicks, uptime } from "@/lib/format"
+import { axisBytes, axisTop, bytes, clockFor, cpuName, despike, quarters, rate, timeTicks, uptime } from "@/lib/format"
 import { request } from "@/lib/http"
 
 const RANGES = [
@@ -96,9 +96,17 @@ function valueOf(point: HistoryPoint, key: ProbeKey, kind: "probes" | "loss"): n
   return typeof value === "number" ? value : null
 }
 
+function despikeWindow(points: { ts: number }[]): number {
+  let step = Infinity
+  for (let i = 1; i < points.length; i++) step = Math.min(step, points[i].ts - points[i - 1].ts)
+  return Math.min(15, Math.max(3, Math.round(420_000 / step) | 1))
+}
+
 export function Latency({ node, site, hours, className }: { node: Node; site: Site | null; hours: number; className?: string }) {
   const { rows, failed, retry } = useHistory(node, hours)
   const [hidden, setHidden] = useState<ProbeKey[]>([])
+  const [smooth, setSmooth] = useState(false)
+  const [zoom, setZoom] = useState<[number, number] | null>(null)
   const labels = site?.probe_labels
   const series = useMemo(
     () => PROBE_KEYS
@@ -109,22 +117,27 @@ export function Latency({ node, site, hours, className }: { node: Node; site: Si
   const shown = series.filter((item) => !hidden.includes(item.key))
   const chartRows = useMemo(() => {
     const map = new Map<number, Record<string, number | null>>()
+    const window = despikeWindow(rows ?? [])
     for (const item of series) {
-      for (const point of item.points) {
+      const values = item.points.map((point) => valueOf(point, item.key, "probes"))
+      const smoothed = despike(values, window)
+      item.points.forEach((point, index) => {
         const row = map.get(point.ts) ?? { ts: point.ts }
-        row[item.key] = valueOf(point, item.key, "probes")
+        row[item.key] = values[index]
+        row[`s${item.key}`] = smoothed[index]
         map.set(point.ts, row)
-      }
+      })
     }
     return [...map.values()].sort((a, b) => Number(a.ts) - Number(b.ts))
-  }, [series])
+  }, [series, rows])
 
   if (!rows) return <Skeleton className={className ?? "h-40"} />
   if (failed) return <p className="py-6 text-center text-sm text-destructive" role="alert">读取延迟失败：{failed}<button onClick={retry} className="ml-2 text-primary hover:underline">重试</button></p>
   if (!series.length) return <p className="py-6 text-center text-sm text-muted-foreground">这段时间没有延迟数据</p>
   return (
     <div className={className}>
-      <div className="mb-2 flex flex-wrap justify-center gap-1.5">
+      <div className="mb-2 flex flex-wrap items-center justify-center gap-1.5">
+        <button onClick={() => setSmooth((value) => !value)} className={`rounded-full px-2 py-0.5 text-[11px] ${smooth ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}>去尖峰</button>
         {series.map((item, index) => (
           <button
             key={item.key}
@@ -137,15 +150,26 @@ export function Latency({ node, site, hours, className }: { node: Node; site: Si
         ))}
       </div>
       <ResponsiveContainer>
-        <LineChart data={chartRows}>
+        <ComposedChart data={chartRows}>
           <CartesianGrid strokeDasharray="3 3" className="stroke-border" vertical={false} />
           <XAxis {...timeAxis(chartRows as { ts: number }[], hours)} />
-          <YAxis width={Y_WIDTH} unit="ms" {...AXIS} />
-          <Tooltip labelFormatter={(ts) => new Date(Number(ts)).toLocaleString("zh-CN")} formatter={(v) => v === null ? ["超时", ""] : [`${Number(v).toFixed(0)} ms`, ""]} contentStyle={TIP} />
+          <YAxis width={Y_WIDTH} unit="ms" domain={["auto", "auto"]} {...AXIS} />
+          <Tooltip labelFormatter={(ts) => new Date(Number(ts)).toLocaleString("zh-CN")} formatter={(v) => v === null ? ["超时", ""] : [`${Math.round(Number(v))} ms`, ""]} contentStyle={TIP} />
           {shown.map((item) => (
-            <Line key={item.key} dataKey={item.key} name={item.name} stroke={PALETTE[series.findIndex((s) => s.key === item.key) % PALETTE.length]} {...SERIES} />
+            <Line key={item.key} dataKey={smooth ? `s${item.key}` : item.key} name={item.name} stroke={PALETTE[series.findIndex((s) => s.key === item.key) % PALETTE.length]} {...SERIES} />
           ))}
-        </LineChart>
+          <Brush
+            dataKey="ts"
+            height={22}
+            travellerWidth={8}
+            tickFormatter={clockFor(hours)}
+            fill="var(--color-muted)"
+            stroke="var(--color-muted-foreground)"
+            startIndex={zoom?.[0]}
+            endIndex={zoom?.[1]}
+            onChange={(range) => setZoom([range.startIndex ?? 0, range.endIndex ?? chartRows.length - 1])}
+          />
+        </ComposedChart>
       </ResponsiveContainer>
     </div>
   )
@@ -246,11 +270,9 @@ export function NodeDetail({ node, site }: { node: Node; site: Site | null }) {
               </AreaChart>
             </ResponsiveContainer>
           </Panel>
-          {node.show_probes && (
-            <Panel title="延迟">
-              <Latency node={node} site={site} hours={hours} className="h-40" />
-            </Panel>
-          )}
+          <Panel title="延迟">
+            <Latency node={node} site={site} hours={hours} className="h-40" />
+          </Panel>
         </div>
       )}
     </div>
