@@ -1,0 +1,7 @@
+node_modules
+dist
+reference
+*.local
+.DS_Store
+.idea
+.vscode
