@@ -18,8 +18,12 @@ assert.equal(daysUntil("2026-01-10", new Date("2026-01-08T12:00:00").getTime()),
 assert.equal(daysUntil(""), null)
 assert.deepEqual(quarters(100), [0, 25, 50, 75, 100])
 assert.equal(axisTop(0.4, 4, 10, 100), 4)
-assert.equal(monthUsage({ month_rx: 1, month_tx: null, traffic_mode: "total" }), null)
+assert.equal(monthUsage({ month_rx: 1, month_tx: null, traffic_mode: "total" }), 1)
+assert.equal(monthUsage({ month_rx: null, month_tx: null, traffic_mode: "total" }), null)
 assert.equal(monthUsage({ month_rx: 1, month_tx: 4, traffic_mode: "max" }), 4)
 assert.equal(monthUsage({ month_rx: 1, month_tx: 4, traffic_mode: "dl" }), 1)
+assert.equal(monthUsage({ month_rx: 1, month_tx: 4, traffic_mode: "down" }), 5)
+assert.equal(monthUsage({ month_rx: null, month_tx: 4, traffic_mode: "ul" }), 4)
+assert.equal(monthUsage({ month_rx: null, month_tx: 4, traffic_mode: "dl" }), null)
 
 console.log("format ok")

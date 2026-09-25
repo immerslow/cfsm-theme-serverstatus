@@ -67,9 +67,14 @@ export function useFleet(): Fleet {
       Promise.allSettled(bases.map((base) => request(base, "/api/servers").then((payload) => adaptList(payload, base))))
         .then((settled) => {
           if (stopped) return
-          const next = settled.flatMap((result) => result.status === "fulfilled" ? result.value : [])
+          const next = bases.flatMap((base, index) => {
+            const result = settled[index]
+            if (result.status === "fulfilled") return result.value
+            return current.filter((node) => node.base === base)
+          })
           const failures = settled.filter((result) => result.status === "rejected")
           if (next.length || !failures.length) apply(next)
+          if (!stopped && !document.hidden) bases.forEach(connect)
           if (failures.length === settled.length) {
             const cause = failures[0].reason
             const message = cause instanceof Error ? cause.message : "网络错误"
@@ -203,15 +208,34 @@ export function useFleet(): Fleet {
       stopFallback()
     }
 
+    const sites = new Map<string, Site>()
+    const applySite = () => {
+      const ordered = bases.flatMap((base) => {
+        const item = sites.get(base)
+        return item ? [item] : []
+      })
+      const next = ordered.find((item) => item.base === bases[0]) ?? ordered[0]
+      if (!next) return
+      const minutes = ordered.map((item) => item.ws_timeout_minutes).filter((value) => value > 0)
+      timeoutMinutes = minutes.length ? Math.min(...minutes) : 0
+      setSite({
+        ...next,
+        probe_labels: Object.assign({}, ...ordered.map((item) => item.probe_labels).reverse()),
+        authorization: ordered.every((item) => item.authorization),
+        is_public: ordered.every((item) => item.is_public),
+        turnstile_enabled: ordered.some((item) => item.turnstile_enabled),
+        turnstile_site_key: ordered.find((item) => item.turnstile_site_key)?.turnstile_site_key ?? "",
+        ws_timeout_minutes: timeoutMinutes,
+      })
+    }
     void Promise.all(bases.map((base) =>
       request(base, "/api/config")
         .then((payload) => adaptSite(payload, base))
         .catch(() => adaptSite({}, base)),
-    )).then((sites) => {
+    )).then((loaded) => {
       if (stopped) return
-      const next = sites.find((item) => item.base === bases[0]) ?? sites[0]
-      timeoutMinutes = next.ws_timeout_minutes
-      setSite(next)
+      for (const item of loaded) sites.set(item.base, item)
+      applySite()
     })
     void pull().then(() => { if (!stopped) bases.forEach(connect) })
     expireTimer = setInterval(() => {
@@ -250,6 +274,7 @@ export function useServer(id: string | null, list: Node[] | null, timeoutMinutes
     let ping: ReturnType<typeof setInterval> | null = null
     let retry: ReturnType<typeof setTimeout> | null = null
     let fallback: ReturnType<typeof setInterval> | null = null
+    let lifetime: ReturnType<typeof setTimeout> | null = null
     let attempt = 0
     const pull = () =>
       request(base, `/api/server?id=${encodeURIComponent(id)}`)
@@ -289,7 +314,7 @@ export function useServer(id: string | null, list: Node[] | null, timeoutMinutes
           if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: "ping" }))
         }, PING_MS)
         if (timeoutMinutes > 0) {
-          setTimeout(() => {
+          lifetime = setTimeout(() => {
             if (socket?.readyState === WebSocket.OPEN) socket.close(1000, "connection lifetime exceeded")
           }, timeoutMinutes * 60_000)
         }
@@ -303,6 +328,8 @@ export function useServer(id: string | null, list: Node[] | null, timeoutMinutes
         socket = null
         if (ping) clearInterval(ping)
         ping = null
+        if (lifetime) clearTimeout(lifetime)
+        lifetime = null
         if (stopped || event.code === POLICY_VIOLATION || document.hidden) return
         startFallback()
         const delay = Math.min(RETRY_MAX_MS, RETRY_BASE_MS * 2 ** Math.min(attempt, 5))
@@ -326,6 +353,7 @@ export function useServer(id: string | null, list: Node[] | null, timeoutMinutes
       stopped = true
       if (ping) clearInterval(ping)
       if (retry) clearTimeout(retry)
+      if (lifetime) clearTimeout(lifetime)
       stopFallback()
       socket?.close()
       document.removeEventListener("visibilitychange", onHide)

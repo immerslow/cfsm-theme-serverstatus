@@ -66,11 +66,34 @@ assert.equal(list[0].price, null)
 assert.equal(monthUsage(list[0]), 40)
 assert.deepEqual(groupsOf(list), ["香港"])
 
-const merged = mergeSample(list[0], { id: "a", ts: now, data: { cpu: 40 } }, now)
+const merged = mergeSample(list[0], { id: "a", ts: now, data: { cpu: 40, ping_cu: 8 } }, now)
 assert.equal(merged.metrics?.cpu, 40)
 assert.equal(merged.metrics?.mem_used, list[0].metrics?.mem_used)
 assert.equal(merged.os, "Ubuntu 22.04")
 assert.equal(merged.online, true)
+assert.equal(merged.ping.ct, 20)
+assert.equal(merged.ping.cu, 8)
+assert.equal(merged.loss.ct, 0)
+
+const flagged = adaptNode({ id: "c", name: "flag", is_online: "0", cpu_cores: 1, last_updated: now }, "https://status.example", {}, now)
+assert.equal(flagged?.online, false)
+
+const windowed = adaptNode({
+  id: "d",
+  name: "window",
+  cpu_cores: 1,
+  last_updated: now,
+  ping_ct: 9,
+  ping: [{ ts: 1, ct: 11, cu: null }, { ts: 2, ct: false }],
+  loss: [{ ts: 1, ct: 0 }],
+}, "https://status.example", {}, now)
+assert.equal(windowed?.ping.ct, 9)
+assert.equal(windowed?.probe_samples.length, 2)
+assert.equal(windowed?.probe_samples[0].probes.ct, 11)
+assert.equal(windowed?.probe_samples[0].probes.cu, null)
+assert.equal(windowed?.probe_samples[0].loss.ct, 0)
+assert.equal(windowed?.probe_samples[1].probes.ct, false)
+assert.equal(windowed?.probe_samples[1].loss.cu, false)
 
 const stale = adaptNode({ id: "b", name: "old", last_updated: now - 6 * 60 * 1000, cpu_cores: 1 }, "https://status.example", {}, now)
 assert.equal(stale?.online, false)
@@ -96,6 +119,8 @@ assert.equal(history[0].mem_used, 10 * 1024 * 1024)
 assert.equal(history[1].mem_used, null)
 assert.equal(history[0].probes.ct, 15)
 assert.equal(history[0].loss.ct, null)
+assert.equal(history[0].probes.cu, null)
 assert.equal(history[1].probes.ct, false)
+assert.equal(history[1].total_rx, null)
 
 console.log("adapt ok")

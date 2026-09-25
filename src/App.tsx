@@ -68,13 +68,18 @@ function NavItem({ href, active, icon: Icon, children }: { href: string; active:
 export default function App() {
   const [dark, toggleTheme] = useTheme()
   const route = useRoute()
-  const { nodes, site, error, refresh } = useFleet()
+  const { nodes, site, error, closed, refresh } = useFleet()
   const openId = route.name === "server" ? route.id : null
   const { node: selected, error: detailError } = useServer(openId, nodes, site?.ws_timeout_minutes ?? 0)
   const remote = site ? resolveSettings(site.theme_options, null) : null
   const [override, setOverride] = useState<Settings | null>(null)
   const settings = override ?? remote ?? resolveSettings(null)
   useEffect(() => { void loadDetail() }, [])
+  useEffect(() => {
+    if (closed || (site && !site.is_public && !site.authorization)) {
+      location.href = site ? adminUrl(site.base) : "/admin#admin"
+    }
+  }, [closed, site])
   useEffect(() => {
     const name = selected?.name
     document.title = [name, site?.title || "ServerStatus"].filter(Boolean).join(" · ")

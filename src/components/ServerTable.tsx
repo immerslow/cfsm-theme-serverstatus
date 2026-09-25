@@ -44,11 +44,11 @@ export function OsIcon({ os, className }: { os: string; className?: string }) {
   return <img src={osIconUrl(os)} alt="" className={cn("size-3.5 shrink-0 object-contain", className)} />
 }
 
-function Bar({ pct, label }: { pct: number | null; label?: string }) {
+function Bar({ pct, label, title }: { pct: number | null; label?: string; title?: string }) {
   const v = pct === null ? 0 : Math.min(100, Math.max(0, pct))
   const tone = v >= 90 ? "bg-(image:--bar-danger)" : v >= 80 ? "bg-(image:--bar-warn)" : "bg-(image:--bar-ok)"
   return (
-    <div className="relative h-5 overflow-hidden rounded bg-bar-track shadow-[inset_0_1px_2px_rgb(0_0_0/0.1)] @max-3xl:h-4">
+    <div title={title} className="relative h-5 overflow-hidden rounded bg-bar-track shadow-[inset_0_1px_2px_rgb(0_0_0/0.1)] @max-3xl:h-4">
       <div className={cn("h-full rounded-l-[3px] transition-[width] duration-500", tone)} style={{ width: `${v}%` }} />
       <span className="tnum absolute inset-y-0 left-1.5 flex items-center text-[10px] leading-none text-bar-text @max-3xl:left-0.5 @max-3xl:text-[8px]">
         {label ?? (pct === null ? "—" : `${v.toFixed(1)}%`)}
@@ -128,7 +128,7 @@ function Details({ node, site }: { node: Node; site: Site | null }) {
         {node.show_traffic && <Line label="本月流量">{flow(node.month_rx, node.month_tx)}</Line>}
         {node.show_traffic && <Line label="总流量">{flow(node.total_rx, node.total_tx)}</Line>}
         <Line label={node.online ? "在线" : "离线"}>
-          {node.online ? "在线" : away >= 60_000 ? uptime(away / 1000) : "刚刚"}
+          {node.online ? (uptimeSeconds(node) ? uptime(uptimeSeconds(node)) : "在线") : away >= 60_000 ? uptime(away / 1000) : "刚刚"}
         </Line>
         {node.show_price && (
           <Line label="续费">
@@ -148,11 +148,11 @@ function Details({ node, site }: { node: Node; site: Site | null }) {
       </div>
       <div className="space-y-2 border-t pt-3">
           <div className="flex items-baseline justify-between gap-3 text-xs">
-            <span className="text-muted-foreground">网络延迟 · 最近 24 小时</span>
+            <span className="text-muted-foreground">{node.probe_samples.length ? "网络延迟 · 最近约 2 小时" : "网络延迟 · 最近 24 小时"}</span>
             <Link href={`#/server/${encodeURIComponent(node.id)}`} className="text-primary hover:underline">查看资源图表 →</Link>
           </div>
           <Suspense fallback={<Skeleton className="h-[310px] @max-3xl:h-[250px]" />}>
-            <Latency node={node} site={site} hours={24} tall />
+            <Latency node={node} site={site} hours={24} tall samples={node.probe_samples.length ? node.probe_samples : undefined} />
           </Suspense>
       </div>
     </div>
@@ -197,6 +197,7 @@ function Row({ node, index, site }: { node: Node; index: number; site: Site | nu
             <Bar
               pct={node.traffic_limit && traffic !== null ? percent(traffic, node.traffic_limit) : null}
               label={`${compact(traffic)} / ${node.traffic_limit ? compact(node.traffic_limit) : FOREVER}`}
+              title={`本月已用 ${bytes(traffic)}${node.traffic_limit ? ` / ${bytes(node.traffic_limit)}` : "，不限额"}`}
             />
           ) : "—"}
         </TableCell>
@@ -227,8 +228,11 @@ export function ServerTables({ nodes, site }: { nodes: Node[]; site: Site | null
 function ServerTable({ title, nodes, site }: { title: string; nodes: Node[]; site: Site | null }) {
   const online = nodes.filter((n) => n.online && n.metrics)
   const sum = (pick: (n: Node) => number | null) => online.reduce((total, n) => total + (pick(n) ?? 0), 0)
-  const used = nodes.reduce((total, n) => n.show_traffic ? total + (monthUsage(n) ?? 0) : total, 0)
-  const limit = nodes.reduce((total, n) => n.show_traffic ? total + (n.traffic_limit ?? 0) : total, 0)
+  const billed = nodes.filter((n) => n.show_traffic)
+  const used = billed.reduce((total, n) => total + (monthUsage(n) ?? 0), 0)
+  const limited = billed.filter((n) => n.traffic_limit)
+  const limit = limited.reduce((total, n) => total + (n.traffic_limit ?? 0), 0)
+  const unlimited = billed.length - limited.length
   const heads: [keyof typeof COL, ReactNode][] = [
     ["status", "状态"], ["name", "名称"], ["location", "位置"], ["os", "系统"], ["uptime", "在线"],
     ["expiry", "到期"], ["load", "负载"], ["speed", "网速 ↓|↑"],
@@ -242,7 +246,9 @@ function ServerTable({ title, nodes, site }: { title: string; nodes: Node[]; sit
           <span className="whitespace-nowrap">
             在线 {nodes.filter((n) => n.online).length} / {nodes.length} · ↓ {compact(sum((n) => n.metrics?.net_rx ?? null))}/s · ↑ {compact(sum((n) => n.metrics?.net_tx ?? null))}/s
           </span>
-          <span className="whitespace-nowrap">流量 {bytes(used)}{limit > 0 ? ` / ${bytes(limit)}` : ""}</span>
+          <span className="whitespace-nowrap" title={unlimited > 0 ? `另有 ${unlimited} 台不限额，未计入配额` : "本月已用 / 配额"}>
+            流量 {bytes(used)}{limit > 0 ? ` / ${bytes(limit)}` : ""}
+          </span>
         </div>
       </div>
       <Table className="text-center text-sm @max-3xl:table-fixed @max-3xl:text-[10px]">

@@ -63,6 +63,7 @@ export type Node = {
   metrics: Metrics | null
   ping: Record<ProbeKey, Probe>
   loss: Record<ProbeKey, Probe>
+  probe_samples: ProbeSample[]
   show_price: boolean
   show_expire: boolean
   show_traffic: boolean
@@ -90,11 +91,13 @@ export type HistoryPoint = {
   disk_used: number | null
   net_rx: number | null
   net_tx: number | null
-  month_rx: number | null
-  month_tx: number | null
+  total_rx: number | null
+  total_tx: number | null
   probes: Record<ProbeKey, Probe>
   loss: Record<ProbeKey, Probe>
 }
+
+export type ProbeSample = { ts: number; probes: Record<ProbeKey, Probe>; loss: Record<ProbeKey, Probe> }
 
 const ONLINE_MS = 5 * 60 * 1000
 const MIB = 1024 * 1024
@@ -123,7 +126,7 @@ function nonneg(value: unknown): number | null {
   return n !== null && n >= 0 ? n : null
 }
 
-/** `false` 未配置，`null` 超时，数字是有效读数。缺字段按未配置处理。 */
+/** `false` 未配置，`null` 超时或没有样本，数字是有效读数。缺字段按未配置处理。 */
 export function probe(value: unknown): Probe {
   if (value === false || value === undefined) return false
   if (value === null) return null
@@ -131,8 +134,50 @@ export function probe(value: unknown): Probe {
   return n !== null && n >= 0 ? n : false
 }
 
+function flag(value: unknown): boolean | null {
+  if (value === true || value === 1 || value === "1" || value === "true") return true
+  if (value === false || value === 0 || value === "0" || value === "false") return false
+  return null
+}
+
 function probes(input: Record<string, unknown>, prefix: "ping" | "loss"): Record<ProbeKey, Probe> {
   return Object.fromEntries(PROBE_KEYS.map((key) => [key, probe(input[`${prefix}_${key}`])])) as Record<ProbeKey, Probe>
+}
+
+/** 历史接口在 `loss_* === null` 时会把丢包和延迟一起删掉，剩下的延迟不能当成未配置。 */
+function historyProbes(input: Record<string, unknown>, prefix: "ping" | "loss"): Record<ProbeKey, Probe> {
+  return Object.fromEntries(PROBE_KEYS.map((key) => {
+    if (!(`ping_${key}` in input) && !(`loss_${key}` in input)) return [key, null]
+    return [key, probe(input[`${prefix}_${key}`])]
+  })) as Record<ProbeKey, Probe>
+}
+
+function windowProbes(point: Record<string, unknown>): Record<ProbeKey, Probe> {
+  return Object.fromEntries(PROBE_KEYS.map((key) => [key, key in point ? probe(point[key]) : false])) as Record<ProbeKey, Probe>
+}
+
+/** 列表在开启三网详情时附带约 2 小时的探测窗口，和标量 `ping_*` 不是同一套字段。 */
+function probeSamples(ping: unknown, loss: unknown): ProbeSample[] {
+  const points = new Map<number, ProbeSample>()
+  const take = (value: unknown, kind: "probes" | "loss") => {
+    if (!Array.isArray(value)) return
+    for (const item of value) {
+      const point = rec(item)
+      const ts = point && num(point.ts)
+      if (!point || ts === null) continue
+      const sample = points.get(ts) ?? { ts, probes: windowProbes({}), loss: windowProbes({}) }
+      sample[kind] = windowProbes(point)
+      points.set(ts, sample)
+    }
+  }
+  take(ping, "probes")
+  take(loss, "loss")
+  return [...points.values()].sort((a, b) => a.ts - b.ts)
+}
+
+function timeoutMinutes(value: unknown): number {
+  const minutes = num(value)
+  return minutes !== null && Number.isInteger(minutes) && minutes >= 0 && minutes <= 1440 ? minutes : 0
 }
 
 function loads(value: unknown): [number | null, number | null, number | null] {
@@ -162,7 +207,8 @@ function priceOf(value: unknown): number | null {
 }
 
 function onlineOf(input: Record<string, unknown>, now: number): boolean {
-  if (typeof input.is_online === "boolean") return input.is_online
+  const online = flag(input.is_online)
+  if (online !== null) return online
   const seen = num(input.last_updated) ?? num(input.timestamp)
   return seen !== null && now - seen <= ONLINE_MS
 }
@@ -191,7 +237,7 @@ function metricsOf(input: Record<string, unknown>): Metrics | null {
 }
 
 function boolOf(value: unknown, fallback: boolean): boolean {
-  return typeof value === "boolean" ? value : fallback
+  return flag(value) ?? fallback
 }
 
 export function adaptNode(value: unknown, base: string, site: { show_price?: boolean; show_expire?: boolean; show_traffic?: boolean; show_probes?: boolean } = {}, now = Date.now()): Node | null {
@@ -234,6 +280,7 @@ export function adaptNode(value: unknown, base: string, site: { show_price?: boo
     metrics,
     ping: probes(input, "ping"),
     loss: probes(input, "loss"),
+    probe_samples: probeSamples(input.ping, input.loss),
     show_price: boolOf(own.show_price, site.show_price ?? true),
     show_expire: boolOf(own.show_expire, site.show_expire ?? true),
     show_traffic: boolOf(own.show_tf, site.show_traffic ?? true),
@@ -275,12 +322,12 @@ export function adaptSite(value: unknown, base: string): Site {
     base,
     title: str(input.site_title) ?? "ServerStatus",
     version: str(input.version) ?? "",
-    is_public: input.is_public !== false,
-    authorization: input.authorization === true,
-    turnstile_enabled: input.turnstile_enabled === true,
+    is_public: flag(input.is_public) !== false,
+    authorization: flag(input.authorization) === true,
+    turnstile_enabled: flag(input.turnstile_enabled) === true,
     turnstile_site_key: str(input.turnstile_site_key) ?? "",
     probe_labels: labels,
-    ws_timeout_minutes: Math.max(0, Math.min(1440, num(input.frontend_ws_timeout_minutes) ?? 0)),
+    ws_timeout_minutes: timeoutMinutes(input.frontend_ws_timeout_minutes),
     theme_options: rec(input.theme_options) ?? {},
   }
 }
@@ -353,8 +400,8 @@ export function mergeSample(node: Node, sample: Sample, now = Date.now()): Node 
     total_tx: "net_tx" in data ? patch.total_tx : node.total_tx,
     month_rx: "net_rx_monthly" in data ? patch.month_rx : node.month_rx,
     month_tx: "net_tx_monthly" in data ? patch.month_tx : node.month_tx,
-    ping: PROBE_KEYS.some((key) => `ping_${key}` in data) ? patch.ping : node.ping,
-    loss: PROBE_KEYS.some((key) => `loss_${key}` in data) ? patch.loss : node.loss,
+    ping: { ...node.ping, ...Object.fromEntries(PROBE_KEYS.filter((key) => `ping_${key}` in data).map((key) => [key, patch.ping[key]])) },
+    loss: { ...node.loss, ...Object.fromEntries(PROBE_KEYS.filter((key) => `loss_${key}` in data).map((key) => [key, patch.loss[key]])) },
     deployed: node.deployed || patch.deployed,
   }
 }
@@ -376,20 +423,21 @@ export function adaptHistory(value: unknown): HistoryPoint[] {
       disk_used: disk === null ? null : disk * MIB,
       net_rx: nonneg(input.net_in_speed),
       net_tx: nonneg(input.net_out_speed),
-      month_rx: nonneg(input.net_rx),
-      month_tx: nonneg(input.net_tx),
-      probes: probes(input, "ping"),
-      loss: probes(input, "loss"),
+      total_rx: nonneg(input.net_rx),
+      total_tx: nonneg(input.net_tx),
+      probes: historyProbes(input, "ping"),
+      loss: historyProbes(input, "loss"),
     }]
   }).sort((a, b) => a.ts - b.ts)
 }
 
+/** 官方只认 `dl` / `ul` / `max`，其余都按上下行相加。缺一边按 0，和 `parseFloat(...) || 0` 一致。 */
 export function monthUsage(node: Pick<Node, "month_rx" | "month_tx" | "traffic_mode">): number | null {
-  const rx = node.month_rx
-  const tx = node.month_tx
-  if (node.traffic_mode === "dl" || node.traffic_mode === "down") return rx
-  if (node.traffic_mode === "ul" || node.traffic_mode === "up") return tx
-  if (rx === null || tx === null) return null
+  if (node.month_rx === null && node.month_tx === null) return null
+  const rx = node.month_rx ?? 0
+  const tx = node.month_tx ?? 0
+  if (node.traffic_mode === "dl") return node.month_rx
+  if (node.traffic_mode === "ul") return node.month_tx
   if (node.traffic_mode === "max") return Math.max(rx, tx)
   return rx + tx
 }
