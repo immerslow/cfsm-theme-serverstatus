@@ -63,7 +63,6 @@ export type Node = {
   metrics: Metrics | null
   ping: Record<ProbeKey, Probe>
   loss: Record<ProbeKey, Probe>
-  probe_samples: ProbeSample[]
   show_price: boolean
   show_expire: boolean
   show_traffic: boolean
@@ -96,8 +95,6 @@ export type HistoryPoint = {
   probes: Record<ProbeKey, Probe>
   loss: Record<ProbeKey, Probe>
 }
-
-export type ProbeSample = { ts: number; probes: Record<ProbeKey, Probe>; loss: Record<ProbeKey, Probe> }
 
 const ONLINE_MS = 5 * 60 * 1000
 const MIB = 1024 * 1024
@@ -150,29 +147,6 @@ function historyProbes(input: Record<string, unknown>, prefix: "ping" | "loss"):
     if (!(`ping_${key}` in input) && !(`loss_${key}` in input)) return [key, null]
     return [key, probe(input[`${prefix}_${key}`])]
   })) as Record<ProbeKey, Probe>
-}
-
-function windowProbes(point: Record<string, unknown>): Record<ProbeKey, Probe> {
-  return Object.fromEntries(PROBE_KEYS.map((key) => [key, key in point ? probe(point[key]) : false])) as Record<ProbeKey, Probe>
-}
-
-/** 列表在开启三网详情时附带约 2 小时的探测窗口，和标量 `ping_*` 不是同一套字段。 */
-function probeSamples(ping: unknown, loss: unknown): ProbeSample[] {
-  const points = new Map<number, ProbeSample>()
-  const take = (value: unknown, kind: "probes" | "loss") => {
-    if (!Array.isArray(value)) return
-    for (const item of value) {
-      const point = rec(item)
-      const ts = point && num(point.ts)
-      if (!point || ts === null) continue
-      const sample = points.get(ts) ?? { ts, probes: windowProbes({}), loss: windowProbes({}) }
-      sample[kind] = windowProbes(point)
-      points.set(ts, sample)
-    }
-  }
-  take(ping, "probes")
-  take(loss, "loss")
-  return [...points.values()].sort((a, b) => a.ts - b.ts)
 }
 
 function timeoutMinutes(value: unknown): number {
@@ -280,7 +254,6 @@ export function adaptNode(value: unknown, base: string, site: { show_price?: boo
     metrics,
     ping: probes(input, "ping"),
     loss: probes(input, "loss"),
-    probe_samples: probeSamples(input.ping, input.loss),
     show_price: boolOf(own.show_price, site.show_price ?? true),
     show_expire: boolOf(own.show_expire, site.show_expire ?? true),
     show_traffic: boolOf(own.show_tf, site.show_traffic ?? true),

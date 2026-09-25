@@ -78,23 +78,6 @@ assert.equal(merged.loss.ct, 0)
 const flagged = adaptNode({ id: "c", name: "flag", is_online: "0", cpu_cores: 1, last_updated: now }, "https://status.example", {}, now)
 assert.equal(flagged?.online, false)
 
-const windowed = adaptNode({
-  id: "d",
-  name: "window",
-  cpu_cores: 1,
-  last_updated: now,
-  ping_ct: 9,
-  ping: [{ ts: 1, ct: 11, cu: null }, { ts: 2, ct: false }],
-  loss: [{ ts: 1, ct: 0 }],
-}, "https://status.example", {}, now)
-assert.equal(windowed?.ping.ct, 9)
-assert.equal(windowed?.probe_samples.length, 2)
-assert.equal(windowed?.probe_samples[0].probes.ct, 11)
-assert.equal(windowed?.probe_samples[0].probes.cu, null)
-assert.equal(windowed?.probe_samples[0].loss.ct, 0)
-assert.equal(windowed?.probe_samples[1].probes.ct, false)
-assert.equal(windowed?.probe_samples[1].loss.cu, false)
-
 const stale = adaptNode({ id: "b", name: "old", last_updated: now - 6 * 60 * 1000, cpu_cores: 1 }, "https://status.example", {}, now)
 assert.equal(stale?.online, false)
 assert.equal(stale?.deployed, true)

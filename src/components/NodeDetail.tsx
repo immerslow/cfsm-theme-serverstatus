@@ -3,7 +3,7 @@ import { Area, AreaChart, Brush, CartesianGrid, ComposedChart, Line, LineChart, 
 
 import { Dot, Flag } from "@/components/ServerTable"
 import { Skeleton } from "@/components/ui/skeleton"
-import { adaptHistory, DEFAULT_PROBE_LABELS, PROBE_KEYS, type HistoryPoint, type Node, type Probe, type ProbeKey, type ProbeSample, type Site } from "@/lib/adapt"
+import { adaptHistory, DEFAULT_PROBE_LABELS, PROBE_KEYS, type HistoryPoint, type Node, type Probe, type ProbeKey, type Site } from "@/lib/adapt"
 import { axisBytes, axisTop, bytes, clockFor, cpuName, despike, quarters, rate, timeTicks, uptime } from "@/lib/format"
 import { ApiError, request } from "@/lib/http"
 import { cn } from "@/lib/utils"
@@ -117,14 +117,14 @@ function despikeWindow(points: { ts: number }[]): number {
   return Math.min(15, Math.max(3, Math.round(420_000 / step) | 1))
 }
 
-export function Latency({ node, site, hours, tall, samples }: { node: Node; site: Site | null; hours: number; tall?: boolean; samples?: ProbeSample[] }) {
-  const remote = useHistory(node, hours, !samples)
-  const rows = samples ?? remote.rows
-  const failed = samples ? "" : remote.failed
+export function Latency({ node, site, hours, tall }: { node: Node; site: Site | null; hours: number; tall?: boolean }) {
+  const remote = useHistory(node, hours)
+  const rows = remote.rows
+  const failed = remote.failed
   const retry = remote.retry
   const [hidden, setHidden] = useState<ProbeKey[]>([])
   const [smooth, setSmooth] = useState(false)
-  const [zoom, setZoom] = useState<{ of: ProbeSample[] | HistoryPoint[]; range: [number, number] } | null>(null)
+  const [zoom, setZoom] = useState<{ of: HistoryPoint[]; range: [number, number] } | null>(null)
   const labels = site?.probe_labels
   const series = useMemo(
     () => PROBE_KEYS

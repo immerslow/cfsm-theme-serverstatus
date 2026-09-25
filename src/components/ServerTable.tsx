@@ -148,11 +148,11 @@ function Details({ node, site }: { node: Node; site: Site | null }) {
       </div>
       <div className="space-y-2 border-t pt-3">
           <div className="flex items-baseline justify-between gap-3 text-xs">
-            <span className="text-muted-foreground">{node.probe_samples.length ? "网络延迟 · 最近约 2 小时" : "网络延迟 · 最近 24 小时"}</span>
+            <span className="text-muted-foreground">网络延迟 · 最近 24 小时</span>
             <Link href={`#/server/${encodeURIComponent(node.id)}`} className="text-primary hover:underline">查看资源图表 →</Link>
           </div>
           <Suspense fallback={<Skeleton className="h-[310px] @max-3xl:h-[250px]" />}>
-            <Latency node={node} site={site} hours={24} tall samples={node.probe_samples.length ? node.probe_samples : undefined} />
+            <Latency node={node} site={site} hours={24} tall />
           </Suspense>
       </div>
     </div>
