@@ -137,11 +137,15 @@ export function Latency({ node, site, hours, tall }: { node: Node; site: Site | 
       .filter((item) => item.points.length > 0),
     [rows, labels],
   )
-  const shown = series.filter((item) => !hidden.includes(item.key))
+  const shown = useMemo(() => series.filter((item) => !hidden.includes(item.key)), [series, hidden])
+  // Every probe's columns are built whether or not it is on screen: recharts resets
+  // the brush whenever the data array changes identity, so hiding one must not
+  // shorten the rows or move the indices the brush has selected. A hidden probe has
+  // no `Line`, which keeps it out of both the fitted Y domain and the tooltip.
   const chartRows = useMemo(() => {
     const map = new Map<number, Record<string, number | null>>()
     const window = despikeWindow(rows ?? [])
-    for (const item of shown) {
+    for (const item of series) {
       const values = item.points.map((point) => valueOf(point.probes[item.key]))
       const smoothed = despike(values, window)
       item.points.forEach((point, index) => {
@@ -153,7 +157,7 @@ export function Latency({ node, site, hours, tall }: { node: Node; site: Site | 
       })
     }
     return [...map.values()].sort((a, b) => Number(a.ts) - Number(b.ts))
-  }, [shown, rows])
+  }, [series, rows])
 
   if (!rows) return <Skeleton className={tall ? "h-[310px] @max-3xl:h-[250px]" : "h-[190px]"} />
   if (failed) return <p className="py-6 text-center text-sm text-destructive" role="alert">读取延迟失败：{failed}<button onClick={retry} className="ml-2 text-primary hover:underline">重试</button></p>
@@ -206,6 +210,11 @@ export function Latency({ node, site, hours, tall }: { node: Node; site: Site | 
             {shown.map((item) => (
               <Line key={item.key} dataKey={smooth ? `s${item.key}` : item.key} name={item.name} stroke={PALETTE[series.findIndex((s) => s.key === item.key) % PALETTE.length]} {...SERIES} />
             ))}
+            {/* Left uncontrolled: recharts already slices the chart to the
+                selection itself, and re-reading it from props on every move
+                snaps the handle onto the nearest sample instead of the cursor.
+                `zoom` is kept only to fit the X axis ticks to the same window,
+                and is dropped when a new range arrives and moves the rows. */}
             <Brush
               dataKey="ts"
               height={22}
@@ -213,8 +222,6 @@ export function Latency({ node, site, hours, tall }: { node: Node; site: Site | 
               tickFormatter={clockFor(hours)}
               fill="var(--color-muted)"
               stroke="var(--color-muted-foreground)"
-              startIndex={span[0]}
-              endIndex={span[1]}
               onChange={(range) => {
                 if (!rows) return
                 setZoom({ of: rows, range: [range.startIndex ?? 0, range.endIndex ?? last] })
