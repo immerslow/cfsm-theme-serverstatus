@@ -15,7 +15,8 @@
   --primary: #337ab7;
   --primary-foreground: #ffffff;
   --muted: #f9f9f9;
-  --muted-foreground: #777777;
+  /* 比 #777 深，在卡片、斑马纹行和页面底色上都够 4.5:1。 */
+  --muted-foreground: #707070;
   --accent: #e6e6e6;
   --accent-foreground: #212121;
   --destructive: #a94442;

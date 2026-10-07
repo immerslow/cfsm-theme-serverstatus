@@ -4,13 +4,16 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import type { Site } from "@/lib/adapt"
 import { request } from "@/lib/http"
-import { clearLocal, parseSettings, saveLocal, type Settings } from "@/lib/settings"
+import { clearLocal, parseSettings, saveLocal, type GroupView, type Settings } from "@/lib/settings"
 
 export function SettingsView({ site, value, onChange }: { site: Site | null; value: Settings; onChange: (next: Settings) => void }) {
   const [draft, setDraft] = useState(value)
   const [message, setMessage] = useState("")
   const [saving, setSaving] = useState(false)
-  const dirty = draft.hide_offline !== value.hide_offline || draft.default_group !== value.default_group
+  const dirty =
+    draft.hide_offline !== value.hide_offline ||
+    draft.default_group !== value.default_group ||
+    draft.group_view !== value.group_view
 
   const saveBrowser = () => {
     saveLocal(draft)
@@ -52,8 +55,21 @@ export function SettingsView({ site, value, onChange }: { site: Site | null; val
         <input type="checkbox" checked={draft.hide_offline} onChange={(e) => setDraft({ ...draft, hide_offline: e.target.checked })} />
       </label>
       <label className="block space-y-1.5 text-sm">
+        <span>分组呈现</span>
+        <select
+          value={draft.group_view}
+          onChange={(e) => setDraft({ ...draft, group_view: e.target.value as GroupView })}
+          className="h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base outline-none md:text-sm dark:bg-input/30"
+        >
+          <option value="cards">每组一张表</option>
+          <option value="tabs">一张表配页签切换</option>
+        </select>
+        <span className="block text-xs text-muted-foreground">没有分组时两种都一样。</span>
+      </label>
+      <label className="block space-y-1.5 text-sm">
         <span>默认分组</span>
         <Input value={draft.default_group} placeholder="留空显示全部" onChange={(e) => setDraft({ ...draft, default_group: e.target.value })} />
+        <span className="block text-xs text-muted-foreground">按分组名筛选或预设页签；没有这个分组时显示全部。</span>
       </label>
       <div className="flex flex-wrap gap-2">
         <Button onClick={saveBrowser} disabled={!dirty}>保存到此浏览器</Button>

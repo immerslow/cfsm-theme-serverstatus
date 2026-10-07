@@ -1,4 +1,4 @@
-import { lazy, Suspense, useState, type ReactNode } from "react"
+import { lazy, Suspense, useEffect, useState, type ComponentProps, type ReactNode } from "react"
 
 import { Skeleton } from "@/components/ui/skeleton"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -213,6 +213,7 @@ function Row({ node, index, site }: { node: Node; index: number; site: Site | nu
   )
 }
 
+/** 每组一张表。未分组的不给卡片，混进同名前缀的 key 会撞。 */
 export function ServerTables({ nodes, site }: { nodes: Node[]; site: Site | null }) {
   const groups = groupsOf(nodes)
   if (groups.length === 0) return <ServerTable title="服务器" nodes={nodes} site={site} />
@@ -225,7 +226,86 @@ export function ServerTables({ nodes, site }: { nodes: Node[]; site: Site | null
   )
 }
 
-function ServerTable({ title, nodes, site }: { title: string; nodes: Node[]; site: Site | null }) {
+/**
+ * 一张表配页签切换。`group` 为 null 是全部，"" 是未分组。
+ *
+ * 页签曾经被清空或改名——未分组也算——就回到全部而不是留一张空表，并且忘掉这个
+ * 选择，免得后来同名的新分组把整页接管过去。
+ */
+export function ServerTableByGroup({ nodes, site, group, onGroup }: {
+  nodes: Node[]
+  site: Site | null
+  group: string | null
+  onGroup: (group: string | null) => void
+}) {
+  const groups = groupsOf(nodes)
+  const ungrouped = nodes.filter((n) => !n.group).length
+  const tabs = groups.length === 0 ? [] : [
+    { value: null, label: "全部", count: nodes.length },
+    ...groups.map((g) => ({ value: g, label: g, count: nodes.filter((n) => n.group === g).length })),
+    ...(ungrouped ? [{ value: "", label: "未分组", count: ungrouped }] : []),
+  ]
+  const current = tabs.some((t) => t.value === group) ? group : null
+  useEffect(() => {
+    if (current !== group) onGroup(current)
+  }, [current, group, onGroup])
+  const shown = current === null ? nodes : nodes.filter((n) => (n.group ?? "") === current)
+
+  return (
+    <section className="@container rounded-md border bg-card p-5 text-card-foreground shadow-sm max-md:p-2">
+      {/* 有页签时汇总挪到右边，把整行让出来：居中的话页签会被挤在左边三分之一。 */}
+      <div
+        className={cn(
+          "grid items-baseline gap-x-3 gap-y-1 px-1 pb-3 max-md:pb-2 @max-3xl:grid-cols-1",
+          tabs.length ? "grid-cols-[1fr_auto]" : "grid-cols-[1fr_auto_1fr]",
+        )}
+      >
+        {tabs.length === 0 ? (
+          <h2 className="min-w-0 truncate text-lg font-semibold max-md:text-sm">服务器</h2>
+        ) : (
+          // 换行而不是横向滚动，每个分组都留在视线里。标题留给读屏软件，它按标题跳转。
+          <div role="group" aria-label="分组" className="flex min-w-0 flex-wrap gap-1">
+            <h2 className="sr-only">服务器</h2>
+            {tabs.map((t) => (
+              <Tab
+                // 分组名是自由文本，所以带一个「全部」用不到的 key 前缀。
+                key={t.value === null ? "*" : `=${t.value}`}
+                active={current === t.value}
+                onClick={() => onGroup(t.value)}
+                className="text-sm max-md:text-xs"
+              >
+                {t.label}
+                <span className="tabular-nums">{t.count}</span>
+              </Tab>
+            ))}
+          </div>
+        )}
+        <Summary nodes={shown} />
+      </div>
+      <Rows nodes={shown} site={site} />
+    </section>
+  )
+}
+
+/**
+ * 几个选一，按下时标出选中的那个：图表页的时间范围、列表的分组。手机上更紧，
+ * 一年历史的七个档位在 360px 屏上一行放得下。
+ */
+export function Tab({ active, className, ...props }: ComponentProps<"button"> & { active: boolean }) {
+  return (
+    <button
+      aria-pressed={active}
+      className={cn(
+        "inline-flex shrink-0 items-center gap-1.5 rounded-md px-1.5 py-1 text-xs whitespace-nowrap transition-colors sm:px-2.5",
+        active ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted",
+        className,
+      )}
+      {...props}
+    />
+  )
+}
+
+function Summary({ nodes }: { nodes: Node[] }) {
   const online = nodes.filter((n) => n.online && n.metrics)
   const sum = (pick: (n: Node) => number | null) => online.reduce((total, n) => total + (pick(n) ?? 0), 0)
   const billed = nodes.filter((n) => n.show_traffic)
@@ -233,36 +313,48 @@ function ServerTable({ title, nodes, site }: { title: string; nodes: Node[]; sit
   const limited = billed.filter((n) => n.traffic_limit)
   const limit = limited.reduce((total, n) => total + (n.traffic_limit ?? 0), 0)
   const unlimited = billed.length - limited.length
+  return (
+    <div className="tabular-nums flex flex-wrap justify-center gap-x-3 gap-y-1 text-xs text-muted-foreground max-md:text-[10px]">
+      <span className="whitespace-nowrap">
+        在线 {nodes.filter((n) => n.online).length} / {nodes.length} · ↓ {compact(sum((n) => n.metrics?.net_rx ?? null))}/s · ↑ {compact(sum((n) => n.metrics?.net_tx ?? null))}/s
+      </span>
+      <span className="whitespace-nowrap" title={unlimited > 0 ? `另有 ${unlimited} 台不限额，未计入配额` : "本月已用 / 配额"}>
+        流量 {bytes(used)}{limit > 0 ? ` / ${bytes(limit)}` : ""}
+      </span>
+    </div>
+  )
+}
+
+function Rows({ nodes, site }: { nodes: Node[]; site: Site | null }) {
   const heads: [keyof typeof COL, ReactNode][] = [
     ["status", "状态"], ["name", "名称"], ["location", "位置"], ["os", "系统"], ["uptime", "在线"],
     ["expiry", "到期"], ["load", "负载"], ["speed", "网速 ↓|↑"],
     ["bar", "CPU"], ["bar", "内存"], ["bar", "硬盘"], ["traffic", "流量"],
   ]
   return (
+    <Table className="text-center text-sm @max-3xl:table-fixed @max-3xl:text-[10px]">
+      <TableHeader>
+        <TableRow className="border-0 hover:bg-transparent">
+          {heads.map(([col, label], i) => (
+            <TableHead key={i} className={cn("h-8 border-t px-1.5 text-center font-semibold @max-3xl:px-0.5", COL[col])}>{label}</TableHead>
+          ))}
+        </TableRow>
+      </TableHeader>
+      <TableBody className="[&_td]:h-[29px] [&_td]:border-t [&_td]:px-1.5 [&_td]:py-1 @max-3xl:[&_td]:px-0.5">
+        {nodes.map((n, i) => <Row key={n.id} node={n} index={i} site={site} />)}
+      </TableBody>
+    </Table>
+  )
+}
+
+function ServerTable({ title, nodes, site }: { title: string; nodes: Node[]; site: Site | null }) {
+  return (
     <section className="@container rounded-md border bg-card p-5 text-card-foreground shadow-sm max-md:p-2">
       <div className="grid grid-cols-[1fr_auto_1fr] items-baseline gap-x-3 gap-y-1 px-1 pb-3 max-md:pb-2 @max-3xl:grid-cols-1">
         <h2 className="min-w-0 truncate text-lg font-semibold max-md:text-sm" title={title}>{title}</h2>
-        <div className="tnum flex flex-wrap justify-center gap-x-3 gap-y-1 text-xs text-muted-foreground max-md:text-[10px]">
-          <span className="whitespace-nowrap">
-            在线 {nodes.filter((n) => n.online).length} / {nodes.length} · ↓ {compact(sum((n) => n.metrics?.net_rx ?? null))}/s · ↑ {compact(sum((n) => n.metrics?.net_tx ?? null))}/s
-          </span>
-          <span className="whitespace-nowrap" title={unlimited > 0 ? `另有 ${unlimited} 台不限额，未计入配额` : "本月已用 / 配额"}>
-            流量 {bytes(used)}{limit > 0 ? ` / ${bytes(limit)}` : ""}
-          </span>
-        </div>
+        <Summary nodes={nodes} />
       </div>
-      <Table className="text-center text-sm @max-3xl:table-fixed @max-3xl:text-[10px]">
-        <TableHeader>
-          <TableRow className="border-0 hover:bg-transparent">
-            {heads.map(([col, label], i) => (
-              <TableHead key={i} className={cn("h-8 border-t px-1.5 text-center font-semibold @max-3xl:px-0.5", COL[col])}>{label}</TableHead>
-            ))}
-          </TableRow>
-        </TableHeader>
-        <TableBody className="[&_td]:h-[29px] [&_td]:border-t [&_td]:px-1.5 [&_td]:py-1 @max-3xl:[&_td]:px-0.5">
-          {nodes.map((n, i) => <Row key={n.id} node={n} index={i} site={site} />)}
-        </TableBody>
-      </Table>
+      <Rows nodes={nodes} site={site} />
     </section>
   )
 }

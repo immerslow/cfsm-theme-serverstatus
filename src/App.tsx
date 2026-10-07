@@ -2,10 +2,11 @@ import { lazy, Suspense, useEffect, useMemo, useState, useSyncExternalStore, typ
 import { ArrowUp, ChartLine, House, Moon, Settings as SettingsIcon, Sun, UserRound, type LucideIcon } from "lucide-react"
 
 import { NodePicker } from "@/components/NodePicker"
-import { ServerTables } from "@/components/ServerTable"
+import { ServerTableByGroup, ServerTables } from "@/components/ServerTable"
 import { SettingsView } from "@/components/SettingsView"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
+import { groupsOf } from "@/lib/adapt"
 import { useFleet, useServer } from "@/lib/live"
 import { adminUrl } from "@/lib/http"
 import mark from "@/assets/mark.svg"
@@ -97,9 +98,18 @@ export default function App() {
 
   const sorted = useMemo(() => {
     const list = [...(nodes ?? [])].sort((a, b) => a.sort - b.sort || a.name.localeCompare(b.name))
-    const grouped = settings.default_group ? list.filter((node) => node.group === settings.default_group) : list
-    return settings.hide_offline ? grouped.filter((node) => node.online || !node.deployed) : grouped
+    return settings.hide_offline ? list.filter((node) => node.online || !node.deployed) : list
   }, [nodes, settings])
+  const groups = useMemo(() => groupsOf(sorted), [sorted])
+  // 每组一张表时 `default_group` 直接过滤；页签模式下它改成预选的那一档。
+  const initial = settings.default_group && groups.includes(settings.default_group) ? settings.default_group : null
+  // 选中的那一档连同它对应的默认分组一起存，改了设置就当没选过，而不是留着上一次的选择。
+  const [picked, setPicked] = useState<{ base: string; value: string | null } | null>(null)
+  const group = picked && picked.base === settings.default_group ? picked.value : initial
+  const setGroup = (value: string | null) => setPicked({ base: settings.default_group, value })
+  const shown = settings.group_view === "cards" && settings.default_group
+    ? sorted.filter((node) => node.group === settings.default_group)
+    : sorted
 
   return (
     <div className="flex min-h-svh flex-col">
@@ -135,7 +145,12 @@ export default function App() {
         ) : !nodes ? (
           <Skeleton className="h-80" />
         ) : route.name === "home" ? (
-          sorted.length === 0 ? <p className="rounded-md border bg-card py-16 text-center text-sm text-muted-foreground shadow-sm">还没有节点</p> : <ServerTables nodes={sorted} site={site} />
+          sorted.length === 0 ? <p className="rounded-md border bg-card py-16 text-center text-sm text-muted-foreground shadow-sm">还没有节点</p>
+            : settings.group_view === "tabs" ? (
+              <ServerTableByGroup nodes={sorted} site={site} group={group} onGroup={setGroup} />
+            ) : (
+              <ServerTables nodes={shown} site={site} />
+            )
         ) : selected ? (
           <div className="grid gap-5 rounded-md border bg-card p-5 text-card-foreground shadow-sm max-md:gap-3 max-md:p-2.5 md:grid-cols-[220px_minmax(0,1fr)]">
             <NodePicker nodes={sorted} selected={selected.id} />

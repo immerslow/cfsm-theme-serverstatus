@@ -1,17 +1,22 @@
 const KEY = "cfsm-serverstatus-settings"
 
+export type GroupView = "cards" | "tabs"
+
 export type Settings = {
   hide_offline: boolean
   default_group: string
+  /** 有分组时怎么呈现：每组一张表，还是一张表配页签切换。 */
+  group_view: GroupView
 }
 
-export const DEFAULT_SETTINGS: Settings = { hide_offline: false, default_group: "" }
+export const DEFAULT_SETTINGS: Settings = { hide_offline: false, default_group: "", group_view: "cards" }
 
 export function parseSettings(value: unknown): Settings {
   const rec = value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {}
   return {
     hide_offline: rec.hide_offline === true,
     default_group: typeof rec.default_group === "string" ? rec.default_group : "",
+    group_view: rec.group_view === "tabs" ? "tabs" : "cards",
   }
 }
 
