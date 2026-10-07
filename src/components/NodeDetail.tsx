@@ -1,11 +1,15 @@
 import { useEffect, useMemo, useState } from "react"
-import { Area, AreaChart, Brush, CartesianGrid, ComposedChart, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
+import {
+  Area, AreaChart, Brush, CartesianGrid, ComposedChart, Line, LineChart, ResponsiveContainer, Tooltip,
+  XAxis, YAxis, type DotItemDotProps,
+} from "recharts"
 
 import { Dot, Flag } from "@/components/ServerTable"
 import { Skeleton } from "@/components/ui/skeleton"
 import { adaptHistory, DEFAULT_PROBE_LABELS, PROBE_KEYS, type HistoryPoint, type Node, type Probe, type ProbeKey, type Site } from "@/lib/adapt"
 import {
   axisBytes, axisTop, byteTop, bytes, clockFor, cpuName, despike, quarters, RATE_FLOOR, rate, rateAxis, timeTicks, uptime,
+  withGaps,
 } from "@/lib/format"
 import { ApiError, NETWORK_ERROR, request } from "@/lib/http"
 import { cn } from "@/lib/utils"
@@ -25,6 +29,18 @@ const GUEST_HISTORY_HOURS = 24
 
 const AXIS = { stroke: "currentColor", fontSize: 11, tickLine: false, axisLine: false }
 const SERIES = { dot: false as const, strokeWidth: 1.5, isAnimationActive: false, connectNulls: false as const }
+/**
+ * 资源图的曲线。两侧都是空档的行没有邻居可连，画出来会什么都不显示——离线一段
+ * 之后只回来一个桶时尤其明显，所以这种行画成一个小圆点。
+ */
+const RESOURCE_SERIES = {
+  ...SERIES,
+  dot: ({ cx, cy, index, points, stroke }: DotItemDotProps) =>
+    cy == null || points[index - 1]?.y != null || points[index + 1]?.y != null ? null : (
+      <circle cx={cx} cy={cy} r={2} fill={stroke} />
+    ),
+}
+
 /**
  * 每张堆叠图共用一个宽度，按各自的标签定：百分比下 40px，「172 MB」下 68px。
  * 四个绘图区不齐，CPU 的尖峰和造成它的网速尖峰会落在不同的 x 上。
@@ -249,6 +265,9 @@ export function NodeDetail({ node, site }: { node: Node; site: Site | null }) {
   const { rows, failed, retry } = useHistory(node, hours)
   const m = node.metrics
   const away = node.last_seen ? (Date.now() - node.last_seen) / 1000 : 0
+  // 曲线上断开的行：空档里插一行空行，让曲线断开而不是拉成一条直线。
+  // 坐标轴仍按真实数据算，所以插行只进 `chartRows`。
+  const chartRows = useMemo(() => withGaps(rows ?? []), [rows])
   const tops = useMemo(() => {
     const max = (pick: (row: HistoryPoint) => number | null) => (rows ?? []).reduce((hi, row) => Math.max(hi, pick(row) ?? 0), 0)
     return {
@@ -273,13 +292,15 @@ export function NodeDetail({ node, site }: { node: Node; site: Site | null }) {
   }, [rows])
   // 抬到轴底的那一份只给曲线用，`net_rx` / `net_tx` 保留 hub 的原值给提示框。
   const rateRows = useMemo(
-    () => (rows ?? []).map((row) => ({
+    () => withGaps((rows ?? []).map((row) => ({
       ...row,
       rx: row.net_rx === null ? null : Math.max(row.net_rx, RATE_FLOOR),
       tx: row.net_tx === null ? null : Math.max(row.net_tx, RATE_FLOOR),
-    })),
+    }))),
     [rows],
   )
+  // 四张图共用一份算好的横轴，实时推送每次重渲染不必再排一次刻度。
+  const xAxis = useMemo(() => timeAxis(chartRows, hours), [chartRows, hours])
 
   return (
     <div className="space-y-4">
@@ -309,34 +330,34 @@ export function NodeDetail({ node, site }: { node: Node; site: Site | null }) {
         <div className="space-y-5">
           <Panel title="CPU">
             <ResponsiveContainer>
-              <AreaChart data={rows}>
+              <AreaChart data={chartRows}>
                 <CartesianGrid strokeDasharray="3 3" className="stroke-border" vertical={false} />
-                <XAxis {...timeAxis(rows, hours)} />
+                <XAxis {...xAxis} />
                 <YAxis {...VALUE_AXIS} domain={[0, tops.cpu]} ticks={quarters(tops.cpu)} unit="%" />
                 <Tooltip labelFormatter={(ts) => new Date(Number(ts)).toLocaleString("zh-CN")} formatter={(v) => v === null ? ["—", "CPU"] : [`${Number(v).toFixed(1)}%`, "CPU"]} contentStyle={TIP} />
-                <Area dataKey="cpu" stroke="var(--color-chart-1)" fill="var(--color-chart-1)" fillOpacity={0.15} {...SERIES} />
+                <Area dataKey="cpu" stroke="var(--color-chart-1)" fill="var(--color-chart-1)" fillOpacity={0.15} {...RESOURCE_SERIES} />
               </AreaChart>
             </ResponsiveContainer>
           </Panel>
           <Panel title="负载">
             <ResponsiveContainer>
-              <AreaChart data={rows}>
+              <AreaChart data={chartRows}>
                 <CartesianGrid strokeDasharray="3 3" className="stroke-border" vertical={false} />
-                <XAxis {...timeAxis(rows, hours)} />
+                <XAxis {...xAxis} />
                 <YAxis {...VALUE_AXIS} domain={[0, tops.load]} ticks={quarters(tops.load)} />
                 <Tooltip labelFormatter={(ts) => new Date(Number(ts)).toLocaleString("zh-CN")} formatter={(v) => [v === null ? "—" : Number(v).toFixed(2), "负载"]} contentStyle={TIP} />
-                <Area dataKey="load" name="负载" stroke="var(--color-chart-5)" fill="var(--color-chart-5)" fillOpacity={0.15} {...SERIES} />
+                <Area dataKey="load" name="负载" stroke="var(--color-chart-5)" fill="var(--color-chart-5)" fillOpacity={0.15} {...RESOURCE_SERIES} />
               </AreaChart>
             </ResponsiveContainer>
           </Panel>
           <Panel title={`内存${m?.mem_total ? ` · ${bytes(m.mem_total)}` : ""}`}>
             <ResponsiveContainer>
-              <AreaChart data={rows}>
+              <AreaChart data={chartRows}>
                 <CartesianGrid strokeDasharray="3 3" className="stroke-border" vertical={false} />
-                <XAxis {...timeAxis(rows, hours)} />
+                <XAxis {...xAxis} />
                 <YAxis {...VALUE_AXIS} domain={[0, memTop]} ticks={quarters(memTop)} tickFormatter={axisBytes} />
                 <Tooltip labelFormatter={(ts) => new Date(Number(ts)).toLocaleString("zh-CN")} formatter={(v) => bytes(v === null ? null : Number(v))} contentStyle={TIP} />
-                <Area dataKey="mem_used" name="内存" stroke="var(--color-chart-4)" fill="var(--color-chart-4)" fillOpacity={0.15} {...SERIES} />
+                <Area dataKey="mem_used" name="内存" stroke="var(--color-chart-4)" fill="var(--color-chart-4)" fillOpacity={0.15} {...RESOURCE_SERIES} />
               </AreaChart>
             </ResponsiveContainer>
           </Panel>
@@ -352,19 +373,19 @@ export function NodeDetail({ node, site }: { node: Node; site: Site | null }) {
                   formatter={(_v, name, item) => [rate(item?.payload?.[`net_${String(item?.dataKey ?? "")}`] ?? null), name]}
                   contentStyle={TIP}
                 />
-                <Line dataKey="rx" name="下行" stroke="var(--color-chart-2)" {...SERIES} />
-                <Line dataKey="tx" name="上行" stroke="var(--color-chart-3)" {...SERIES} />
+                <Line dataKey="rx" name="下行" stroke="var(--color-chart-2)" {...RESOURCE_SERIES} />
+                <Line dataKey="tx" name="上行" stroke="var(--color-chart-3)" {...RESOURCE_SERIES} />
               </LineChart>
             </ResponsiveContainer>
           </Panel>
           <Panel title={`硬盘${m?.disk_total ? ` · ${bytes(m.disk_total)}` : ""}`}>
             <ResponsiveContainer>
-              <AreaChart data={rows}>
+              <AreaChart data={chartRows}>
                 <CartesianGrid strokeDasharray="3 3" className="stroke-border" vertical={false} />
-                <XAxis {...timeAxis(rows, hours)} />
+                <XAxis {...xAxis} />
                 <YAxis {...VALUE_AXIS} domain={[0, diskTop]} ticks={quarters(diskTop)} tickFormatter={axisBytes} />
                 <Tooltip labelFormatter={(ts) => new Date(Number(ts)).toLocaleString("zh-CN")} formatter={(v) => bytes(v === null ? null : Number(v))} contentStyle={TIP} />
-                <Area dataKey="disk_used" name="硬盘" stroke="var(--color-chart-5)" fill="var(--color-chart-5)" fillOpacity={0.15} {...SERIES} />
+                <Area dataKey="disk_used" name="硬盘" stroke="var(--color-chart-5)" fill="var(--color-chart-5)" fillOpacity={0.15} {...RESOURCE_SERIES} />
               </AreaChart>
             </ResponsiveContainer>
           </Panel>

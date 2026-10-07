@@ -49,9 +49,10 @@ export function duration(seconds: number): string {
   return `${Math.floor(s / 3600)}:${pad(Math.floor((s % 3600) / 60))}:${pad(s % 60)}`
 }
 
+/** 不封顶：超额的流量读作 212%，进度条自己止于满格。 */
 export function percent(used: number | null, total: number | null): number | null {
   if (used === null || total === null || total <= 0) return null
-  return Math.min(100, (used / total) * 100)
+  return (used / total) * 100
 }
 
 export function uptime(seconds: number | null): string {
@@ -195,6 +196,20 @@ export function rateAxis(low: number, high: number): { domain: [number, number];
   const ticks: number[] = []
   for (let i = top; i >= bottom; i -= step) ticks.unshift(rung(i))
   return { domain: [rung(bottom), rung(top)], ticks }
+}
+
+/**
+ * `rows` 在每处超过常规间距两倍的空档里插一行空行，曲线在那里断开而不是
+ * 拉一条直线过去——离线一天不该读成一天平稳的负载。常规间距取相邻间隔的中位数
+ * 而不是 hub 的桶宽：几分钟上报一次的 agent 每个桶只留下一行。
+ */
+export function withGaps<T extends { ts: number }>(rows: T[]): (T | { ts: number })[] {
+  const gaps = rows.slice(1).map((r, i) => r.ts - rows[i].ts).sort((a, b) => a - b)
+  // 较小的中位数：两个间隔里，短的那个是常规间隔，长的那个才是空档。
+  const usual = gaps[(gaps.length - 1) >> 1]
+  return rows.flatMap((r, i) =>
+    i > 0 && r.ts - rows[i - 1].ts > 2 * usual ? [{ ts: (r.ts + rows[i - 1].ts) / 2 }, r] : [r],
+  )
 }
 
 export function despike(values: (number | null)[], window = 7, sigmas = 3): (number | null)[] {

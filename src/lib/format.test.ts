@@ -2,7 +2,9 @@
 import assert from "node:assert/strict"
 
 import { monthUsage } from "./adapt.ts"
-import { axisBytes, axisTop, byteTop, bytes, compact, daysUntil, pair, percent, quarters, RATE_FLOOR, rateAxis } from "./format.ts"
+import {
+  axisBytes, axisTop, byteTop, bytes, compact, daysUntil, pair, percent, quarters, RATE_FLOOR, rateAxis, withGaps,
+} from "./format.ts"
 
 assert.equal(bytes(null), "—")
 assert.equal(bytes(0), "0 B")
@@ -25,6 +27,19 @@ assert.equal(axisTop(200, 4, 100), 100)
 assert.deepEqual(quarters(byteTop(32 * 1024 ** 2, 1024)).map(axisBytes), ["0 B", "8 MB", "16 MB", "24 MB", "32 MB"])
 assert.deepEqual(quarters(byteTop(2_621_440, 1024)).map(axisBytes), ["0 B", "1 MB", "2 MB", "3 MB", "4 MB"])
 assert.deepEqual(quarters(byteTop(1_258_291, 1024)).map(axisBytes), ["0 B", "512 KB", "1 MB", "1.5 MB", "2 MB"])
+
+// withGaps: 超过常规间距两倍的空档里插一行空行；缺一个桶或上报间隔长的 agent 不插。
+const gapped = (list: number[]) => withGaps(list.map((ts) => ({ ts, v: 1 }))).map((r) => ("v" in r ? r.ts : -r.ts))
+assert.deepEqual(gapped([0, 60, 120, 180, 600, 660]), [0, 60, 120, 180, -390, 600, 660], "离线的一段断开")
+assert.deepEqual(gapped([0, 60, 180, 240]), [0, 60, 180, 240], "缺一个桶不断开")
+assert.deepEqual(gapped([0, 300, 600, 900, 1200]), [0, 300, 600, 900, 1200], "五分钟上报一次的 agent 照常连线")
+assert.deepEqual(gapped([0, 60, 300, 600, 900, 1200]), [0, 60, 300, 600, 900, 1200], "间隔不齐时按中位数而非最小值")
+assert.deepEqual(gapped([0, 60, 660]), [0, 60, -360, 660], "两段间隔时较短的一段是常规间隔")
+assert.deepEqual(gapped([0]), [0], "单点")
+assert.deepEqual(gapped([]), [], "空")
+
+// percent 不封顶：超额读作 212%，进度条自己止于满格。
+assert.equal(percent(212, 100), 212)
 
 // rateAxis: 从不大于最慢速率的那档到不小于最快的那档，标签都是整值，最多六个。
 const axis = (low: number, high: number) => {
