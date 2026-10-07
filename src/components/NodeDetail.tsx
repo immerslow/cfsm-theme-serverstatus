@@ -8,8 +8,8 @@ import { Dot, Flag } from "@/components/ServerTable"
 import { Skeleton } from "@/components/ui/skeleton"
 import { adaptHistory, DEFAULT_PROBE_LABELS, PROBE_KEYS, type HistoryPoint, type Node, type Probe, type ProbeKey, type Site } from "@/lib/adapt"
 import {
-  axisBytes, axisTop, byteTop, bytes, clockFor, cpuName, despike, quarters, RATE_FLOOR, rate, rateAxis, timeTicks, uptime,
-  withGaps,
+  axisBytes, axisTop, byteTop, bytes, clockFor, cpuName, despike, quarters, RATE_FLOOR, rate, rateAxis,
+  smooth as smoothValues, timeTicks, uptime, withGaps,
 } from "@/lib/format"
 import { ApiError, NETWORK_ERROR, request } from "@/lib/http"
 import { cn } from "@/lib/utils"
@@ -149,7 +149,8 @@ export function Latency({ node, site, hours, tall }: { node: Node; site: Site | 
   const failed = remote.failed
   const retry = remote.retry
   const [hidden, setHidden] = useState<ProbeKey[]>([])
-  const [smooth, setSmooth] = useState(false)
+  const [despiked, setDespiked] = useState(false)
+  const [averaged, setAveraged] = useState(false)
   const [zoom, setZoom] = useState<{ of: HistoryPoint[]; range: [number, number] } | null>(null)
   const labels = site?.probe_labels
   const series = useMemo(
@@ -173,11 +174,15 @@ export function Latency({ node, site, hours, tall }: { node: Node; site: Site | 
     const window = despikeWindow(rows ?? [])
     for (const item of series) {
       const values = item.points.map((point) => valueOf(point.probes[item.key]))
-      const smoothed = despike(values, window)
+      // 削峰在前，平滑在后：先换成邻近的中位数，再连同周围的点一起平均，
+      // 免得把刚换好的中位数又掺回原来的尖峰。
+      const clipped = despike(values, window)
+      const averaged = smoothValues(clipped, window)
       item.points.forEach((point, index) => {
         const row = map.get(point.ts) ?? { ts: point.ts }
         row[item.key] = values[index]
-        row[`s${item.key}`] = smoothed[index]
+        row[`s${item.key}`] = clipped[index]
+        row[`m${item.key}`] = averaged[index]
         row[`l${item.key}`] = valueOf(point.loss[item.key])
         map.set(point.ts, row)
       })
@@ -211,12 +216,20 @@ export function Latency({ node, site, hours, tall }: { node: Node; site: Site | 
           )
         })}
         <button
-          onClick={() => setSmooth((value) => !value)}
-          aria-pressed={smooth}
+          onClick={() => setDespiked((value) => !value)}
+          aria-pressed={despiked}
           title="把孤立的异常值换成邻近若干点的中位数，持续的变化保持原样"
-          className={cn("rounded-md border px-2 py-1 text-xs transition-opacity", smooth ? "" : "opacity-40")}
+          className={cn("rounded-md border px-2 py-1 text-xs transition-opacity", despiked ? "" : "opacity-40")}
         >
           削峰
+        </button>
+        <button
+          onClick={() => setAveraged((value) => !value)}
+          aria-pressed={averaged}
+          title="把每个点换成它邻近若干个读数的平均值，压掉逐桶的抖动；比窗口短的突发会被抹平"
+          className={cn("rounded-md border px-2 py-1 text-xs transition-opacity", averaged ? "" : "opacity-40")}
+        >
+          平滑
         </button>
       </div>
       <div className={cn("w-full", tall ? "h-[310px] @max-3xl:h-[250px]" : "h-[190px]")}>
@@ -228,13 +241,19 @@ export function Latency({ node, site, hours, tall }: { node: Node; site: Site | 
             <Tooltip
               labelFormatter={(ts) => new Date(Number(ts)).toLocaleString("zh-CN")}
               formatter={(v, _name, item) => {
-                const loss = Number(item?.payload?.[`l${String(item.dataKey ?? "").replace(/^s/, "")}`] ?? 0)
+                const loss = Number(item?.payload?.[`l${String(item.dataKey ?? "").replace(/^[sm]/, "")}`] ?? 0)
                 return [v === null ? "超时" : `${Math.round(Number(v))} ms${loss > 0 ? ` · 丢 ${lossText(loss)}%` : ""}`, String(item?.name ?? "")]
               }}
               contentStyle={TIP}
             />
             {shown.map((item) => (
-              <Line key={item.key} dataKey={smooth ? `s${item.key}` : item.key} name={item.name} stroke={PALETTE[series.findIndex((s) => s.key === item.key) % PALETTE.length]} {...SERIES} />
+              <Line
+                key={item.key}
+                dataKey={averaged ? `m${item.key}` : despiked ? `s${item.key}` : item.key}
+                name={item.name}
+                stroke={PALETTE[series.findIndex((s) => s.key === item.key) % PALETTE.length]}
+                {...SERIES}
+              />
             ))}
             {/* Left uncontrolled: recharts already slices the chart to the
                 selection itself, and re-reading it from props on every move

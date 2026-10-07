@@ -230,6 +230,28 @@ function median(values: number[]): number {
   return sorted.length % 2 ? sorted[half] : (sorted[half - 1] + sorted[half]) / 2
 }
 
+/**
+ * Centred moving average over `window` samples, nulls skipped and the window
+ * counted in samples rather than positions, so a timeout in the middle of a
+ * stretch of readings does not drag the average toward zero. A window with no
+ * reading in it stays null, which keeps the line broken there rather than
+ * joining across it.
+ *
+ * Smoothing trades resolution for noise: it cuts the sawtooth of per-bucket
+ * jitter without moving a sustained rise, since a step is carried by most of the
+ * window. It does blur a burst shorter than `window`.
+ */
+export function smooth(values: (number | null)[], window = 5): (number | null)[] {
+  const half = window >> 1
+  return values.map((v, i) => {
+    if (v === null) return null
+    const near = values.slice(Math.max(0, i - half), i + half + 1)
+    const readings = near.filter((n): n is number => n !== null)
+    if (!readings.length) return null
+    return readings.reduce((sum, n) => sum + n, 0) / readings.length
+  })
+}
+
 export function flagUrl(code: string): string {
   return `/flags/${code.trim().toLowerCase()}.svg`
 }

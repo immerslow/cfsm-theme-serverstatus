@@ -3,7 +3,8 @@ import assert from "node:assert/strict"
 
 import { monthUsage } from "./adapt.ts"
 import {
-  axisBytes, axisTop, byteTop, bytes, compact, daysUntil, pair, percent, quarters, RATE_FLOOR, rateAxis, withGaps,
+  axisBytes, axisTop, byteTop, bytes, compact, daysUntil, pair, percent, quarters, RATE_FLOOR, rateAxis, smooth,
+  withGaps,
 } from "./format.ts"
 
 assert.equal(bytes(null), "—")
@@ -64,5 +65,26 @@ assert.equal(monthUsage({ month_rx: 1, month_tx: 4, traffic_mode: "dl" }), 1)
 assert.equal(monthUsage({ month_rx: 1, month_tx: 4, traffic_mode: "down" }), 5)
 assert.equal(monthUsage({ month_rx: null, month_tx: 4, traffic_mode: "ul" }), 4)
 assert.equal(monthUsage({ month_rx: null, month_tx: 4, traffic_mode: "dl" }), null)
+
+// smooth: 逐桶的抖动压下去，持续的变化不动，短于窗口的突发被抹平。
+{
+  const flat = smooth([20, 20, 20, 20, 20], 3)
+  assert.deepEqual(flat, [20, 20, 20, 20, 20], "本来是平的就不动")
+  const raw = [20, 40, 20, 40, 20, 40, 20]
+  const noisy = smooth(raw, 3)
+  // 平均不会造出原数据里没有的高点或低点，只把锯齿的幅度压小。
+  const range = (list: (number | null)[]) => Math.max(...list.map((v) => v!)) - Math.min(...list.map((v) => v!))
+  assert.ok(noisy.every((v) => v! >= 20 && v! <= 40), "平滑后仍在原数据的范围内")
+  assert.ok(range(noisy) < range(raw), `幅度被压小（${range(raw)} -> ${range(noisy)}）`)
+  // 一个持续到整窗的台阶：多数窗口里的点都在台阶上，平均仍落在台阶上。
+  const step = smooth([10, 10, 10, 10, 10, 10, 30, 30, 30, 30, 30, 30], 3)
+  assert.ok(step[10]! > 25 && step[10]! <= 30, `台阶后的读数仍在台阶上（得到 ${step[10]}）`)
+  assert.ok(step[5]! < 20, `台阶前的读数仍在台阶下（得到 ${step[5]}）`)
+  // 超时按空缺算而不是当 0，否则一段超时会把平均值拽向 0。
+  assert.equal(smooth([20, null, 20], 3)[1], null, "空缺处仍为空缺，线不接过去")
+  assert.equal(smooth([20, null, 20], 3)[0], 20, "窗口按样本数算，不受空缺影响")
+  assert.equal(smooth([null, null], 3)[0], null, "全是空缺")
+  assert.deepEqual(smooth([], 3), [], "空")
+}
 
 console.log("format ok")
