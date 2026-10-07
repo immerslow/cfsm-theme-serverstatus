@@ -26,7 +26,17 @@ function useTheme() {
     () => DARK_MEDIA.matches,
   )
   const dark = saved ? saved === "dark" : system
-  useEffect(() => { document.documentElement.classList.toggle("dark", dark) }, [dark])
+  useEffect(() => {
+    // 按住过渡再切换。表格行和链接的颜色有 150ms 过渡，其余一次改完，
+    // 那段时间里页面会一半深一半浅。
+    const hold = document.createElement("style")
+    hold.textContent = "*,*::before,*::after{transition:none!important}"
+    document.head.append(hold)
+    document.documentElement.classList.toggle("dark", dark)
+    // 在过渡关着的时候算一次新颜色，撤掉 hold 就不会重新起一次过渡。
+    void document.body.offsetWidth
+    hold.remove()
+  }, [dark])
   return [dark, () => {
     const next = dark ? "light" : "dark"
     localStorage.setItem("theme", next)

@@ -23,7 +23,15 @@ const GUEST_HISTORY_HOURS = 24
 
 const AXIS = { stroke: "currentColor", fontSize: 11, tickLine: false, axisLine: false }
 const SERIES = { dot: false as const, strokeWidth: 1.5, isAnimationActive: false, connectNulls: false as const }
-const Y_WIDTH = 68
+/**
+ * 每张堆叠图共用一个宽度，按各自的标签定：百分比下 40px，「172 MB」下 68px。
+ * 四个绘图区不齐，CPU 的尖峰和造成它的网速尖峰会落在不同的 x 上。
+ *
+ * 列出的刻度全部画出：刻度表本身留了间距，而 recharts 自己的避让会把顶上的
+ * 标签往里挪、丢掉它下面的刻度，再单独稀一处网格线——CPU 轴会少掉 30% 那条，
+ * 1 KB/s 到 100 MB/s 的速率轴会少掉 10 MB/s 的标签和两条网格线。
+ */
+const VALUE_AXIS = { ...AXIS, width: 68, interval: 0 }
 const PALETTE = [1, 2, 3, 4, 5, 6, 7, 8].map((i) => `var(--color-chart-${i})`)
 const TIP = {
   fontSize: 12,
@@ -198,7 +206,7 @@ export function Latency({ node, site, hours, tall }: { node: Node; site: Site | 
           <ComposedChart data={chartRows}>
             <CartesianGrid strokeDasharray="3 3" className="stroke-border" vertical={false} />
             <XAxis {...timeAxis(chartRows as { ts: number }[], hours, span[0], span[1])} />
-            <YAxis width={Y_WIDTH} unit="ms" domain={["auto", "auto"]} {...AXIS} />
+            <YAxis width={68} unit="ms" domain={["auto", "auto"]} {...AXIS} />
             <Tooltip
               labelFormatter={(ts) => new Date(Number(ts)).toLocaleString("zh-CN")}
               formatter={(v, _name, item) => {
@@ -281,7 +289,7 @@ export function NodeDetail({ node, site }: { node: Node; site: Site | null }) {
               <AreaChart data={rows}>
                 <CartesianGrid strokeDasharray="3 3" className="stroke-border" vertical={false} />
                 <XAxis {...timeAxis(rows, hours)} />
-                <YAxis domain={[0, tops.cpu]} ticks={quarters(tops.cpu)} unit="%" width={Y_WIDTH} {...AXIS} />
+                <YAxis {...VALUE_AXIS} domain={[0, tops.cpu]} ticks={quarters(tops.cpu)} unit="%" />
                 <Tooltip labelFormatter={(ts) => new Date(Number(ts)).toLocaleString("zh-CN")} formatter={(v) => v === null ? ["—", "CPU"] : [`${Number(v).toFixed(1)}%`, "CPU"]} contentStyle={TIP} />
                 <Area dataKey="cpu" stroke="var(--color-chart-1)" fill="var(--color-chart-1)" fillOpacity={0.15} {...SERIES} />
               </AreaChart>
@@ -292,7 +300,7 @@ export function NodeDetail({ node, site }: { node: Node; site: Site | null }) {
               <AreaChart data={rows}>
                 <CartesianGrid strokeDasharray="3 3" className="stroke-border" vertical={false} />
                 <XAxis {...timeAxis(rows, hours)} />
-                <YAxis domain={[0, tops.load]} ticks={quarters(tops.load)} width={Y_WIDTH} {...AXIS} />
+                <YAxis {...VALUE_AXIS} domain={[0, tops.load]} ticks={quarters(tops.load)} />
                 <Tooltip labelFormatter={(ts) => new Date(Number(ts)).toLocaleString("zh-CN")} formatter={(v) => [v === null ? "—" : Number(v).toFixed(2), "负载"]} contentStyle={TIP} />
                 <Area dataKey="load" name="负载" stroke="var(--color-chart-5)" fill="var(--color-chart-5)" fillOpacity={0.15} {...SERIES} />
               </AreaChart>
@@ -303,7 +311,7 @@ export function NodeDetail({ node, site }: { node: Node; site: Site | null }) {
               <AreaChart data={rows}>
                 <CartesianGrid strokeDasharray="3 3" className="stroke-border" vertical={false} />
                 <XAxis {...timeAxis(rows, hours)} />
-                <YAxis domain={[0, memTop]} ticks={quarters(memTop)} tickFormatter={axisBytes} width={Y_WIDTH} {...AXIS} />
+                <YAxis {...VALUE_AXIS} domain={[0, memTop]} ticks={quarters(memTop)} tickFormatter={axisBytes} />
                 <Tooltip labelFormatter={(ts) => new Date(Number(ts)).toLocaleString("zh-CN")} formatter={(v) => bytes(v === null ? null : Number(v))} contentStyle={TIP} />
                 <Area dataKey="mem_used" name="内存" stroke="var(--color-chart-4)" fill="var(--color-chart-4)" fillOpacity={0.15} {...SERIES} />
               </AreaChart>
@@ -314,7 +322,7 @@ export function NodeDetail({ node, site }: { node: Node; site: Site | null }) {
               <LineChart data={rows}>
                 <CartesianGrid strokeDasharray="3 3" className="stroke-border" vertical={false} />
                 <XAxis {...timeAxis(rows, hours)} />
-                <YAxis domain={[0, tops.rate]} ticks={quarters(tops.rate)} tickFormatter={axisBytes} unit="/s" width={Y_WIDTH} {...AXIS} />
+                <YAxis {...VALUE_AXIS} domain={[0, tops.rate]} ticks={quarters(tops.rate)} tickFormatter={axisBytes} unit="/s" />
                 <Tooltip labelFormatter={(ts) => new Date(Number(ts)).toLocaleString("zh-CN")} formatter={(v) => rate(v === null ? null : Number(v))} contentStyle={TIP} />
                 <Line dataKey="net_rx" name="下行" stroke="var(--color-chart-2)" {...SERIES} />
                 <Line dataKey="net_tx" name="上行" stroke="var(--color-chart-3)" {...SERIES} />
@@ -326,7 +334,7 @@ export function NodeDetail({ node, site }: { node: Node; site: Site | null }) {
               <AreaChart data={rows}>
                 <CartesianGrid strokeDasharray="3 3" className="stroke-border" vertical={false} />
                 <XAxis {...timeAxis(rows, hours)} />
-                <YAxis domain={[0, diskTop]} ticks={quarters(diskTop)} tickFormatter={axisBytes} width={Y_WIDTH} {...AXIS} />
+                <YAxis {...VALUE_AXIS} domain={[0, diskTop]} ticks={quarters(diskTop)} tickFormatter={axisBytes} />
                 <Tooltip labelFormatter={(ts) => new Date(Number(ts)).toLocaleString("zh-CN")} formatter={(v) => bytes(v === null ? null : Number(v))} contentStyle={TIP} />
                 <Area dataKey="disk_used" name="硬盘" stroke="var(--color-chart-5)" fill="var(--color-chart-5)" fillOpacity={0.15} {...SERIES} />
               </AreaChart>
