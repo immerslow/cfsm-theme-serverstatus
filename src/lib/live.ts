@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react"
 
 import { adaptBatch, adaptList, adaptNode, adaptSite, mergeSample, settleDelay, type Node, type Sample, type Site } from "./adapt"
-import { ApiError, apiBases, request, wsUrl } from "./http"
+import { ApiError, apiBases, NETWORK_ERROR, request, wsUrl } from "./http"
 
 const FALLBACK_MS = 60_000
 const MIN_FALLBACK_MS = 5_000
@@ -77,8 +77,12 @@ export function useFleet(): Fleet {
           if (!stopped && !document.hidden) bases.forEach(connect)
           if (failures.length === settled.length) {
             const cause = failures[0].reason
-            const message = cause instanceof Error ? cause.message : "网络错误"
-            setError(message || "网络错误")
+            // 实时推送正收着数据时，一次列表请求失败说明不了页面：丢在死连接上的
+            // 请求与还开着的流无关，报错交给流自己，别把正在更新的页面说成读不出来。
+            const streaming = [...sockets.values()].some((socket) => socket.readyState === WebSocket.OPEN)
+            if (streaming && cause instanceof ApiError && cause.status === null) return
+            const message = cause instanceof Error ? cause.message : NETWORK_ERROR
+            setError(message || NETWORK_ERROR)
             if (cause instanceof ApiError && cause.status === 401) setClosed(true)
           }
         })
@@ -287,7 +291,7 @@ export function useServer(id: string | null, list: Node[] | null, timeoutMinutes
           }
         })
         .catch((cause: unknown) => {
-          if (!stopped) setError(cause instanceof Error ? (cause.message || "网络错误") : "网络错误")
+          if (!stopped) setError(cause instanceof Error ? (cause.message || NETWORK_ERROR) : NETWORK_ERROR)
         })
     const stopFallback = () => {
       if (!fallback) return

@@ -8,7 +8,7 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "typecheck": "tsc -b --pretty false",
-    "test": "node src/lib/format.test.ts && node src/lib/adapt.test.ts && node src/lib/settings.test.ts",
+    "test": "node src/lib/format.test.ts && node src/lib/adapt.test.ts && node src/lib/http.test.ts && node src/lib/settings.test.ts",
     "validate:dist": "node scripts/validate-dist.mjs",
     "preview": "vite preview"
   },

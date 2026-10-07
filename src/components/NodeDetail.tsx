@@ -5,7 +5,7 @@ import { Dot, Flag } from "@/components/ServerTable"
 import { Skeleton } from "@/components/ui/skeleton"
 import { adaptHistory, DEFAULT_PROBE_LABELS, PROBE_KEYS, type HistoryPoint, type Node, type Probe, type ProbeKey, type Site } from "@/lib/adapt"
 import { axisBytes, axisTop, bytes, clockFor, cpuName, despike, quarters, rate, timeTicks, uptime } from "@/lib/format"
-import { ApiError, request } from "@/lib/http"
+import { ApiError, NETWORK_ERROR, request } from "@/lib/http"
 import { cn } from "@/lib/utils"
 
 const RANGES = [
@@ -57,7 +57,7 @@ function historyError(cause: unknown): string {
   if (cause instanceof ApiError && cause.status === 401) return "登录后才能查看超过 24 小时的历史"
   if (cause instanceof ApiError && cause.status === 409) return "监控端数据库还没升级，历史字段不完整"
   if (cause instanceof ApiError && cause.status === 503) return "历史服务暂时不可用"
-  return cause instanceof Error ? (cause.message || "网络错误") : "网络错误"
+  return cause instanceof Error ? (cause.message || NETWORK_ERROR) : NETWORK_ERROR
 }
 
 function useHistory(node: Node | null, hours: number, enabled = true) {
