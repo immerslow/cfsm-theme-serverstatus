@@ -211,7 +211,7 @@ export function Latency({ node, site, hours, tall }: { node: Node; site: Site | 
                 <line x1="0" y1="3" x2="14" y2="3" stroke={color} strokeWidth="2" />
               </svg>
               {item.name}
-              {item.loss !== null && <span className="tnum opacity-60">{lossText(item.loss)}%</span>}
+              {item.loss !== null && <span className="tabular-nums opacity-60">{lossText(item.loss)}%</span>}
             </button>
           )
         })}
@@ -327,7 +327,7 @@ export function NodeDetail({ node, site }: { node: Node; site: Site | null }) {
         <Dot node={node} />
         <h2 className="truncate text-lg font-semibold">{node.name}</h2>
         <Flag code={node.region} className="text-sm" />
-        <span className="tnum text-xs text-muted-foreground">
+        <span className="tabular-nums text-xs text-muted-foreground">
           {node.online
             ? `在线${node.boot_time ? ` ${uptime(Math.max(0, (Date.now() - node.boot_time) / 1000))}` : ""}`
             : node.deployed ? `离线 ${away >= 60 ? uptime(away) : ""}` : "未接入"}

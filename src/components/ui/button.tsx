@@ -7,7 +7,7 @@ const VARIANTS = {
   ghost: "hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50",
 }
 
-const SIZES = { default: "h-9 px-4 py-2 has-[>svg]:px-3", icon: "size-9" }
+const SIZES = { default: "h-9 px-4 py-2", icon: "size-9" }
 
 function Button({
   className,

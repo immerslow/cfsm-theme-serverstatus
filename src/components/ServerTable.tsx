@@ -50,7 +50,7 @@ function Bar({ pct, label, title }: { pct: number | null; label?: string; title?
   return (
     <div title={title} className="relative h-5 overflow-hidden rounded bg-bar-track shadow-[inset_0_1px_2px_rgb(0_0_0/0.1)] @max-3xl:h-4">
       <div className={cn("h-full rounded-l-[3px] transition-[width] duration-500", tone)} style={{ width: `${v}%` }} />
-      <span className="tnum absolute inset-y-0 left-1.5 flex items-center text-[10px] leading-none text-bar-text @max-3xl:left-0.5 @max-3xl:text-[8px]">
+      <span className="tabular-nums absolute inset-y-0 left-1.5 flex items-center text-[10px] leading-none text-bar-text @max-3xl:left-0.5 @max-3xl:text-[8px]">
         {label ?? (pct === null ? "—" : `${v.toFixed(1)}%`)}
       </span>
     </div>
@@ -82,7 +82,7 @@ function Line({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="grid min-w-0 grid-cols-[5.5em_minmax(0,1fr)] gap-x-2">
       <span className="text-muted-foreground">{label}</span>
-      <span className="tnum break-words">{children}</span>
+      <span className="tabular-nums break-words">{children}</span>
     </div>
   )
 }
@@ -174,7 +174,7 @@ function Row({ node, index, site }: { node: Node; index: number; site: Site | nu
         tabIndex={0}
         onClick={toggle}
         onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), toggle())}
-        className={cn("cursor-pointer border-0 hover:bg-accent", shade)}
+        className={cn("cursor-pointer hover:bg-accent", shade)}
       >
         <TableCell className={COL.status}><Dot node={node} className="mx-auto block @max-3xl:size-2.5" /></TableCell>
         <TableCell className={COL.name} title={node.name}>{node.name}</TableCell>
@@ -203,7 +203,7 @@ function Row({ node, index, site }: { node: Node; index: number; site: Site | nu
         </TableCell>
       </TableRow>
       {open && (
-        <TableRow className={cn("border-0 hover:bg-transparent", shade)}>
+        <TableRow className={shade}>
           <TableCell colSpan={12} className="h-auto! border-t-0! p-0! text-left whitespace-normal">
             <Details node={node} site={site} />
           </TableCell>
@@ -334,7 +334,7 @@ function Rows({ nodes, site }: { nodes: Node[]; site: Site | null }) {
   return (
     <Table className="text-center text-sm @max-3xl:table-fixed @max-3xl:text-[10px]">
       <TableHeader>
-        <TableRow className="border-0 hover:bg-transparent">
+        <TableRow>
           {heads.map(([col, label], i) => (
             <TableHead key={i} className={cn("h-8 border-t px-1.5 text-center font-semibold @max-3xl:px-0.5", COL[col])}>{label}</TableHead>
           ))}
