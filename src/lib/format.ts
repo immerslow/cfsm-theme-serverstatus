@@ -21,8 +21,7 @@ export function pair(used: number | null, total: number | null): string {
 
 export function axisBytes(v: number): string {
   if (!v || v < 0) return "0 B"
-  const unit = Math.min(Math.floor(Math.log(v) / Math.log(1024)), 5)
-  return bytes(v, v / 1024 ** unit >= 100 ? 0 : 1).replace(".0 ", " ")
+  return bytes(v, v / 1024 ** unitOf(v) >= 100 ? 0 : 1).replace(".0 ", " ")
 }
 
 export function rate(n: number | null): string {
@@ -133,21 +132,69 @@ export function timeTicks(from: number, to: number, count = 8): number[] {
   return ticks
 }
 
-const LADDER: Record<number, number[]> = {
-  10: [1, 1.5, 2, 2.5, 3, 4, 5, 7.5, 10],
-  1024: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024],
-}
+/** 跨一个十进制的整档倍率，`axisTop` 永远能在其中找到一档。 */
+const LADDER = [1, 1.5, 2, 2.5, 3, 4, 5, 7.5, 10]
 
-export function axisTop(max: number, floor: number, base = 10, cap = Infinity): number {
+export function axisTop(max: number, floor: number, cap = Infinity): number {
   const target = Math.min(cap, Math.max(max, floor)) / 4
   if (!(target > 0)) return Math.min(cap, floor)
-  const scale = base ** Math.floor(Math.log(target) / Math.log(base))
-  const step = LADDER[base].map((m) => m * scale).find((n) => n >= target)
-  return Math.min(cap, (step ?? target) * 4)
+  const scale = 10 ** Math.floor(Math.log10(target))
+  return Math.min(cap, LADDER.find((m) => m * scale >= target)! * scale * 4)
+}
+
+/**
+ * 以二进制单位打印的量所用的轴顶。四条刻度为 step·[1,2,3,4]，约束落在第三条：
+ * 3m 必须能被 `axisBytes` 印出来，所以倍率取 2 的幂——每一档都满足
+ * （3 · 512 Ki = 1.5 Mi），半档 384 与 768 不满足，会印成 "1.1" 与 "2.3"。
+ * 代价是顶最多比数据大一倍而不是 1.5 倍。
+ */
+export function byteTop(max: number, floor: number): number {
+  const target = Math.max(max, floor) / 4
+  if (!(target > 0)) return floor
+  // scale 取不大于 target 的最大 1024 幂，档取不小于 target/scale 的最小 2 的幂。
+  const scale = 1024 ** Math.floor(Math.log(target) / Math.log(1024))
+  const step = 2 ** Math.ceil(Math.log2(target / scale)) * scale
+  return step * 4
 }
 
 export function quarters(top: number): number[] {
   return [0, 0.25, 0.5, 0.75, 1].map((f) => top * f)
+}
+
+/**
+ * 对数速率轴的档位：每个二进制单位的 1、10 和 100，于是每条网格线都印得出整值
+ * ——100 B、1 KB、10 KB、100 KB、1 MB。相邻两档差 10 倍，跨单位时是 10.24 倍，
+ * 画出来一样均匀。
+ */
+const rung = (i: number) => 1024 ** Math.floor(i / 3) * 10 ** (i % 3)
+
+/** `RATE_FLOOR` 所在的档。 */
+const FLOOR = 3
+
+/**
+ * 画出来的最低速率，1 KB/s，因为对数轴没有零。agent 自己的上报流量比它低，
+ * 一台没别的流量的机器就贴着底，而不是把这点流量放大成动静。
+ */
+export const RATE_FLOOR = rung(FLOOR)
+
+/**
+ * 速率用的对数轴，从不大于 `low` 的那一档到不小于 `high` 的那一档，且不低于
+ * `RATE_FLOOR`。
+ *
+ * 最多六个标签，从顶往下数——顶上的那个说明轴到得有多远。六个能把从底到
+ * 100 MB/s 的每一档都标上，而 100 MB/s 正是千兆口的突发，闲着的线就落在一
+ * 条有标签的网格线上，在 120px 高的面板里标签相距 24px。再宽就隔一档标：
+ * 1 KB/s 到 1 GB/s 有七档，每档都标的话标签相距只有 20px。
+ */
+export function rateAxis(low: number, high: number): { domain: [number, number]; ticks: number[] } {
+  let bottom = FLOOR
+  while (rung(bottom + 1) <= Math.min(low, high)) bottom++
+  let top = bottom + 1
+  while (rung(top) < high) top++
+  const step = Math.ceil((top - bottom) / 5)
+  const ticks: number[] = []
+  for (let i = top; i >= bottom; i -= step) ticks.unshift(rung(i))
+  return { domain: [rung(bottom), rung(top)], ticks }
 }
 
 export function despike(values: (number | null)[], window = 7, sigmas = 3): (number | null)[] {

@@ -4,7 +4,9 @@ import { Area, AreaChart, Brush, CartesianGrid, ComposedChart, Line, LineChart, 
 import { Dot, Flag } from "@/components/ServerTable"
 import { Skeleton } from "@/components/ui/skeleton"
 import { adaptHistory, DEFAULT_PROBE_LABELS, PROBE_KEYS, type HistoryPoint, type Node, type Probe, type ProbeKey, type Site } from "@/lib/adapt"
-import { axisBytes, axisTop, bytes, clockFor, cpuName, despike, quarters, rate, timeTicks, uptime } from "@/lib/format"
+import {
+  axisBytes, axisTop, byteTop, bytes, clockFor, cpuName, despike, quarters, RATE_FLOOR, rate, rateAxis, timeTicks, uptime,
+} from "@/lib/format"
 import { ApiError, NETWORK_ERROR, request } from "@/lib/http"
 import { cn } from "@/lib/utils"
 
@@ -250,13 +252,34 @@ export function NodeDetail({ node, site }: { node: Node; site: Site | null }) {
   const tops = useMemo(() => {
     const max = (pick: (row: HistoryPoint) => number | null) => (rows ?? []).reduce((hi, row) => Math.max(hi, pick(row) ?? 0), 0)
     return {
-      cpu: axisTop(max((row) => row.cpu), 4, 10, 100),
+      cpu: axisTop(max((row) => row.cpu), 4, 100),
       load: axisTop(max((row) => row.load), 1),
-      rate: axisTop(max((row) => Math.max(row.net_rx ?? 0, row.net_tx ?? 0)), 1024, 1024),
     }
   }, [rows])
-  const memTop = m?.mem_total ?? axisTop((rows ?? []).reduce((hi, row) => Math.max(hi, row.mem_used ?? 0), 0), 1024 * 1024, 1024)
-  const diskTop = m?.disk_total ?? axisTop((rows ?? []).reduce((hi, row) => Math.max(hi, row.disk_used ?? 0), 0), 1024 * 1024, 1024)
+  const memTop = m?.mem_total ?? byteTop((rows ?? []).reduce((hi, row) => Math.max(hi, row.mem_used ?? 0), 0), 1024 * 1024)
+  const diskTop = m?.disk_total ?? byteTop((rows ?? []).reduce((hi, row) => Math.max(hi, row.disk_used ?? 0), 0), 1024 * 1024)
+  /**
+   * 速率没有总量可作分母，量程又跨好几个数量级：一台机器一周里从闲着的
+   * 0.2 KB/s 到突发的 70 MB/s。按突发配轴，中间那一分钟的流量在九台里的七台
+   * 上都贴在底下一像素以内，所以这一张改用对数轴，每十倍一样高。
+   *
+   * 画的是桶内的均值，累加起来就是累计流量；agent 自己的上报流量比轴底低，
+   * 抬到底上画，提示框里仍是 hub 给的原值。
+   */
+  const rateY = useMemo(() => {
+    const low = (rows ?? []).reduce((lo, row) => Math.min(lo, row.net_rx ?? Infinity, row.net_tx ?? Infinity), Infinity)
+    const high = (rows ?? []).reduce((hi, row) => Math.max(hi, row.net_rx ?? 0, row.net_tx ?? 0), 0)
+    return rateAxis(Number.isFinite(low) ? low : 0, high)
+  }, [rows])
+  // 抬到轴底的那一份只给曲线用，`net_rx` / `net_tx` 保留 hub 的原值给提示框。
+  const rateRows = useMemo(
+    () => (rows ?? []).map((row) => ({
+      ...row,
+      rx: row.net_rx === null ? null : Math.max(row.net_rx, RATE_FLOOR),
+      tx: row.net_tx === null ? null : Math.max(row.net_tx, RATE_FLOOR),
+    })),
+    [rows],
+  )
 
   return (
     <div className="space-y-4">
@@ -319,13 +342,18 @@ export function NodeDetail({ node, site }: { node: Node; site: Site | null }) {
           </Panel>
           <Panel title={<>网络速率<span className="ml-3 text-chart-2">● 下行</span><span className="ml-2 text-chart-3">● 上行</span></>}>
             <ResponsiveContainer>
-              <LineChart data={rows}>
+              <LineChart data={rateRows}>
                 <CartesianGrid strokeDasharray="3 3" className="stroke-border" vertical={false} />
-                <XAxis {...timeAxis(rows, hours)} />
-                <YAxis {...VALUE_AXIS} domain={[0, tops.rate]} ticks={quarters(tops.rate)} tickFormatter={axisBytes} unit="/s" />
-                <Tooltip labelFormatter={(ts) => new Date(Number(ts)).toLocaleString("zh-CN")} formatter={(v) => rate(v === null ? null : Number(v))} contentStyle={TIP} />
-                <Line dataKey="net_rx" name="下行" stroke="var(--color-chart-2)" {...SERIES} />
-                <Line dataKey="net_tx" name="上行" stroke="var(--color-chart-3)" {...SERIES} />
+                <XAxis {...timeAxis(rateRows, hours)} />
+                <YAxis {...VALUE_AXIS} scale="log" {...rateY} tickFormatter={axisBytes} unit="/s" />
+                {/* 提示框里是 hub 的原值，不是抬到轴底后画的那个数。 */}
+                <Tooltip
+                  labelFormatter={(ts) => new Date(Number(ts)).toLocaleString("zh-CN")}
+                  formatter={(_v, name, item) => [rate(item?.payload?.[`net_${String(item?.dataKey ?? "")}`] ?? null), name]}
+                  contentStyle={TIP}
+                />
+                <Line dataKey="rx" name="下行" stroke="var(--color-chart-2)" {...SERIES} />
+                <Line dataKey="tx" name="上行" stroke="var(--color-chart-3)" {...SERIES} />
               </LineChart>
             </ResponsiveContainer>
           </Panel>
